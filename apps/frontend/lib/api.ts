@@ -1,0 +1,37 @@
+export function apiBase() {
+  // Always use same-origin '/api' in the browser so that LAN devices work
+  if (typeof window !== 'undefined') return '/api';
+  // On the server (SSR/build), fall back to env or local dev default
+  const envBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  return envBase || 'http://localhost:4000/api';
+}
+
+export function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('token');
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
+  const token = getToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const res = await fetch(`${apiBase()}${path}`, { ...options, headers });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export function toApiUrl(path?: string | null): string {
+  const p = path ?? '';
+  if (p.startsWith('http://') || p.startsWith('https://')) return p;
+  if (p.startsWith('/api/')) {
+    // apiBase() ends with '/api', so strip '/api' from the relative path
+    return `${apiBase()}${p.substring(4)}`;
+  }
+  return p;
+}
+
