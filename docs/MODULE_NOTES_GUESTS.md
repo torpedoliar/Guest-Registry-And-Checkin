@@ -48,3 +48,16 @@
 - Backend menambahkan endpoint `GET /api/guests/export/full` (auth) untuk ekspor seluruh kolom tamu: `id,queueNumber,guestId,name,photoUrl,tableLocation,company,notes,checkedIn,checkedInAt,createdAt,updatedAt,eventId`.
 - Frontend menambahkan tombol "Export Event" pada halaman `/admin/guests` (bagian atas dan bawah tabel), berdampingan dengan "Export CSV" (ringkas).
 - Tombol Export di halaman Event Settings dihapus agar alur konsisten.
+
+## Update 2025-11-18 (Glassmorphism & Public Check-in UI)
+- Halaman admin Guests (`/admin/guests`):
+  - Tabel tamu berada di dalam kartu bertema glass gelap dengan border dan blur; teks utama menggunakan putih/putih-70 agar tetap terbaca di atas background event.
+  - Kolom Search menggunakan input terang dengan teks gelap sehingga input tidak menyatu dengan warna kolom/background.
+- Halaman form tamu (`/admin/guests/new` dan `/admin/guests/[id]`):
+  - Form dibungkus dalam kartu glass; label menggunakan teks putih/80; komponen Input/Textarea/Button memakai varian glass sehingga tampilan konsisten dengan tema baru.
+- Halaman check-in publik (`/checkin`):
+  - Pencarian menggunakan satu field (Guest ID atau Nama) dengan gaya glass (panel gelap, teks putih).
+  - Daftar hasil dan riwayat check-in terbaru ditampilkan dalam panel glass dengan teks putih.
+  - Popup konfirmasi check-in berupa overlay full-screen glass gelap yang mengikuti konfigurasi background & overlay event; seluruh teks di dalam popup dibuat putih agar kontras.
+  - Kontrol manual background/config/overlay di popup dihapus; background popup mengikuti konfigurasi Event Settings dan preview SSE.
+

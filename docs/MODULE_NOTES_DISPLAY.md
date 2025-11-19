@@ -1,9 +1,9 @@
 # Modul: Display /show
 
-- Search by `guest_id` atau partial `name`.
-- Tampilkan: queue_number, guest_id, name, photo, table/room, company.
+- Menerima event check-in secara real-time via SSE (`checkin`) dan menampilkan popup tamu yang baru hadir.
+- Tampilkan: `queueNumber`, `guestId`, `name`, `photo`, `tableLocation`/room, `company`.
 - Optimasi layar besar: teks besar, kontras, overlay gelap di atas background.
-- Auto reset ke standby setelah beberapa detik (opsional, dapat ditambah nanti).
+- Auto-hide popup mengikuti konfigurasi `checkinPopupTimeoutMs` dari Event Settings.
 
 ## Update 2025-11-14
 - Normalisasi URL aset (logo, background image/video, foto tamu) di frontend dengan helper `toApiUrl()` agar path `/api/uploads/...` diarahkan ke host backend (`NEXT_PUBLIC_API_BASE_URL`).
@@ -18,3 +18,7 @@
   - Tambah utilitas CSS `text-shadow`, `text-shadow-md`, `text-shadow-lg`.
   - Terapkan `text-shadow-lg` pada judul dan `text-shadow` pada subjudul di `/show` dan `/checkin`.
   - Tujuan: mencegah teks terlihat "mati" saat background terang atau ramai.
+
+## Update 2025-11-18
+- Halaman `/show` tidak lagi memiliki form pencarian manual; seluruh tampilan tamu digerakkan oleh event SSE `checkin` dari backend.
+- Popup tamu pada `/show` menggunakan tema glassmorphism gelap (card `bg-slate-900/85` dengan border putih transparan dan teks putih) agar tetap terbaca di atas background image/video yang variatif.

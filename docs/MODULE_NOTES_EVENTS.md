@@ -29,3 +29,9 @@
   - Bagian upload logo/background menampilkan preview (gambar/video) di dalam blok yang konsisten.
   - Tombol aksi: primary (Save), secondary (Purge Guests), destructive (Purge + Reset Branding), serta kontrol Live Preview/Stop Preview.
 - Perubahan hanya pada tampilan (frontend). Endpoint dan logika backend tidak berubah.
+
+## Update 2025-11-18 (Glassmorphism UI)
+- Konfigurasi event (logo, background image/video, overlay, `checkinPopupTimeoutMs`) kini terintegrasi dengan tema UI glassmorphism di halaman publik:
+  - `/checkin`: panel pencarian, hasil, riwayat, dan popup konfirmasi menggunakan panel glass gelap di atas background event.
+  - `/show`: kartu popup tamu menggunakan card glass gelap dengan teks putih di atas background event.
+- Tidak ada perubahan kontrak API; seluruh perubahan bersifat frontend (tema/visual) dan tetap mengonsumsi endpoint `config`, `preview`, dan SSE `config`/`preview`/`checkin`.

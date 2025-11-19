@@ -6,7 +6,8 @@
 
 ## Aliran Data
 - Admin → login (JWT) → kelola tamu (CRUD, import/export, check-in) → atur event & branding.
-- Publik `/show` → cari tamu by `guest_id`/`name` → tampilkan detail + foto + lokasi + brand event.
+- Publik `/show` → menerima event check-in via SSE (`/public/stream` event `checkin`) → menampilkan popup detail tamu (queueNumber, guestId, name, foto, lokasi) di layar besar.
+- Publik `/checkin` → pencarian tamu by `guestId`/`name` → memanggil endpoint check-in publik dan menampilkan popup konfirmasi + history real-time.
 
 ## Struktur Folder (Monorepo)
 ```

@@ -66,3 +66,20 @@
   - Tambah utilitas `.text-shadow`, `.text-shadow-md`, `.text-shadow-lg` dan diterapkan pada header (Dashboard, Event Settings, Tambah Tamu, Edit Tamu) serta header brand di `/show` dan `/checkin`.
   - Catatan di `docs/MODULE_NOTES_DISPLAY.md` ditambah.
 - Halaman baru: `/about` berisi informasi proyek dan teknologi (dibuat oleh Yohanes Octavian Rizky).
+
+## Update (v0.5.0 - 2025-11-18)
+- Glassmorphism theme di frontend:
+  - Tailwind: palet warna brand semantik (Option 1), shadow glass, dan transisi yang lebih halus.
+  - Global CSS: variabel CSS untuk warna dan level glass, utilitas `.glass-card`, `.glass-input`, dan panel glass lain.
+  - Komponen UI inti (`Button`, `Card`, `Input`, `Select`, `Textarea`, `Label`) mendukung varian `glass`.
+- Redesign halaman admin:
+  - `/admin/login`, `/admin/dashboard`, `/admin/guests`, `/admin/guests/new`, `/admin/guests/[id]`, dan `/admin/settings/event` memakai layout kartu & form glass yang konsisten.
+- Redesign halaman publik:
+  - `/checkin`: satu field pencarian (Guest ID atau Nama) dengan gaya glass; daftar hasil & riwayat dalam panel glass; popup konfirmasi full-screen bertema glass gelap dengan teks putih kontras. Kontrol manual background/config/overlay di popup dihapus.
+  - `/show`: tidak lagi memiliki form pencarian manual; menampilkan kartu glass tamu yang baru check-in berdasarkan event SSE `checkin`.
+- Peningkatan keterbacaan teks:
+  - Penyesuaian warna teks agar tidak abu-abu di atas background glass (form, tabel guests, popup check-in, display), diganti menjadi putih/putih-80 atau brand text tergantung konteks.
+- Dokumentasi:
+  - README diperbarui dengan deskripsi fitur terbaru dan flowchart aplikasi.
+  - `docs/ARCHITECTURE.md`, `docs/MODULE_NOTES_GUESTS.md`, `docs/MODULE_NOTES_DISPLAY.md`, dan `docs/MODULE_NOTES_EVENTS.md` diperbarui agar sesuai dengan alur publik dan tema glass terbaru.
+

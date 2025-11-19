@@ -12,6 +12,7 @@ Aplikasi registrasi & check-in tamu untuk acara/event. Panitia bisa mengelola da
 - **Check-in real-time**: check-in dari halaman admin maupun halaman publik `/checkin`, dengan update langsung ke layar display.
 - **Branding event**: atur nama event, logo, background image/video, dan overlay untuk tampilan layar display.
 - **Layar display publik**: halaman `/show` untuk menampilkan daftar/history tamu yang baru check-in.
+- **UI glassmorphism modern**: tema visual konsisten (Tailwind + CSS variables) untuk halaman admin dan publik dengan efek blur/transparansi dan kontras teks yang dioptimalkan untuk layar besar.
 - **Akses multi-perangkat**: frontend memanggil API via path same-origin `/api`, sehingga bisa diakses lewat IP lokal (LAN) tanpa konfigurasi rumit.
 
 ## Flow Penggunaan (Sudut Pandang Panitia)
@@ -41,6 +42,24 @@ Aplikasi registrasi & check-in tamu untuk acara/event. Panitia bisa mengelola da
 6. **Setelah acara**
    - Export data tamu (ringkas atau penuh) untuk laporan atau arsip.
    - Opsional: purge tamu & reset branding di `/admin/settings/event` untuk event berikutnya.
+
+## Flowchart Aplikasi (Tingkat Tinggi)
+
+```mermaid
+flowchart LR
+  A[Admin Login (/admin/login)]
+  B[Konfigurasi Event & Branding (/admin/settings/event)]
+  C[Kelola & Import Tamu (/admin/guests)]
+  D[Monitoring & Quick Actions (/admin/dashboard)]
+  E[Check-in Publik (/checkin)]
+  F[Layar Display Publik (/show)]
+  G[Export Data Setelah Event]
+
+  A --> B --> C
+  C --> D
+  C --> E --> F
+  C --> G
+```
 
 ## Arsitektur & Struktur Folder
 
