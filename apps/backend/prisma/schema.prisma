@@ -17,44 +17,109 @@ model AdminUser {
   id           String   @id @default(uuid())
   username     String   @unique
   passwordHash String
+  displayName  String?
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt @default(now())
 }
 
 model Event {
-  id                 String               @id @default(uuid())
-  name               String
-  date               DateTime?
-  location           String?
-  logoUrl            String?
-  backgroundType     EventBackgroundType  @default(NONE)
-  backgroundImageUrl String?
-  backgroundVideoUrl String?
-  overlayOpacity     Float                @default(0.5)
-  checkinPopupTimeoutMs Int               @default(5000)
-  isActive           Boolean              @default(false)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  guests             Guest[]
+  id                    String               @id @default(uuid())
+  name                  String
+  date                  DateTime?
+  location              String?
+  logoUrl               String?
+  backgroundType        EventBackgroundType  @default(NONE)
+  backgroundImageUrl    String?
+  backgroundVideoUrl    String?
+  overlayOpacity        Float                @default(0.5)
+  checkinPopupTimeoutMs Int                  @default(5000)
+  enablePhotoCapture    Boolean              @default(false)
+  isActive              Boolean              @default(false)
+  enableLuckyDraw       Boolean              @default(false)
+  enableSouvenir        Boolean              @default(false)
+  allowDuplicateGuestId Boolean              @default(false)
+  customCategories      Json?                // Array of {value: string, label: string, color: string}
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  guests                Guest[]
+  prizes                Prize[]
+  souvenirs             Souvenir[]
+}
+
+enum GuestCategory {
+  REGULAR
+  VIP
+  VVIP
+  MEDIA
+  SPONSOR
+  SPEAKER
+  ORGANIZER
 }
 
 model Guest {
-  id            String   @id @default(uuid())
-  queueNumber   Int
-  guestId       String
-  name          String
-  photoUrl      String?
-  tableLocation String
-  company       String?
-  notes         String?
-  checkedIn     Boolean  @default(false)
-  checkedInAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  eventId       String
-  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id              String        @id @default(uuid())
+  queueNumber     Int
+  guestId         String
+  name            String
+  photoUrl        String?
+  tableLocation   String
+  company         String?
+  department      String?
+  division        String?
+  notes           String?
+  category        GuestCategory @default(REGULAR)
+  checkedIn       Boolean       @default(false)
+  checkedInAt     DateTime?
+  checkedInById   String?
+  checkedInByName String?
+  souvenirTaken   Boolean       @default(false)
+  prizeWins       PrizeWinner[]
+  souvenirTakes   SouvenirTake[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  eventId         String
+  event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
+  // Performance indexes
+  @@index([eventId])
+  @@index([eventId, checkedIn])
+  @@index([eventId, guestId])
+  @@index([eventId, category])
   @@index([name])
-  @@unique([eventId, guestId])
+  @@index([company])
+  @@index([queueNumber])
+}
+
+model Prize {
+  id                String        @id @default(uuid())
+  name              String
+  description       String?
+  imageUrl          String?
+  quantity          Int           @default(1)
+  category          String        @default("HIBURAN") // HIBURAN, UTAMA
+  allowMultipleWins Boolean       @default(false)
+  eventId           String
+  event             Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  prizeWinners      PrizeWinner[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([eventId])
+}
+
+model PrizeWinner {
+  id        String   @id @default(uuid())
+  guestId   String
+  guest     Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  prizeId   String
+  prize     Prize    @relation(fields: [prizeId], references: [id], onDelete: Cascade)
+  wonAt     DateTime @default(now())
+  collection PrizeCollection?
+
+  @@index([guestId])
+  @@index([prizeId])
+  @@unique([guestId, prizeId])
 }
 
 model AuditLog {
@@ -63,4 +128,46 @@ model AuditLog {
   metadata    Json?
   adminUserId String?
   createdAt   DateTime @default(now())
+}
+
+// Souvenir inventory management
+model Souvenir {
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  imageUrl    String?
+  quantity    Int            @default(1)
+  eventId     String
+  event       Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  takes       SouvenirTake[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([eventId])
+}
+
+// Track souvenir distribution to guests
+model SouvenirTake {
+  id            String    @id @default(uuid())
+  guestId       String
+  guest         Guest     @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  souvenirId    String
+  souvenir      Souvenir  @relation(fields: [souvenirId], references: [id], onDelete: Cascade)
+  takenAt       DateTime  @default(now())
+  takenById     String?
+  takenByName   String?
+
+  @@index([guestId])
+  @@index([souvenirId])
+  @@unique([guestId, souvenirId])
+}
+
+// Track prize collection for lucky draw winners
+model PrizeCollection {
+  id            String   @id @default(uuid())
+  prizeWinnerId String   @unique
+  prizeWinner   PrizeWinner @relation(fields: [prizeWinnerId], references: [id], onDelete: Cascade)
+  collectedAt   DateTime @default(now())
+  collectedById String?
+  collectedByName String?
 }

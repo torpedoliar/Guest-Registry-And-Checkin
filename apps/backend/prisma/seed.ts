@@ -13,42 +13,20 @@ async function main() {
     create: { username: 'admin', passwordHash },
   });
 
-  const event = await prisma.event.upsert({
-    where: { id: 'seed-active-event' },
-    update: { isActive: true, name: 'Sample Event' },
-    create: {
-      id: 'seed-active-event',
-      name: 'Sample Event',
-      location: 'Main Hall',
-      isActive: true,
-      backgroundType: 'NONE',
-      overlayOpacity: 0.5,
-    },
-  });
+  console.log('Seed completed:', { admin: admin.username });
 
-  // Seed guests
-  const guests = [
-    { guestId: 'G001', name: 'John Doe', tableLocation: 'A1' },
-    { guestId: 'G002', name: 'Jane Smith', tableLocation: 'B2' },
-    { guestId: 'G003', name: 'Ahmad Fauzi', tableLocation: 'C3' },
-  ];
-
-  for (let i = 0; i < guests.length; i++) {
-    const g = guests[i];
-    await prisma.guest.upsert({
-      where: { eventId_guestId: { eventId: event.id, guestId: g.guestId } },
-      update: {},
-      create: {
-        queueNumber: i + 1,
-        guestId: g.guestId,
-        name: g.name,
-        tableLocation: g.tableLocation,
-        eventId: event.id,
+  const activeEvent = await prisma.event.findFirst({ where: { isActive: true } });
+  if (!activeEvent) {
+    await prisma.event.create({
+      data: {
+        name: 'Default Event',
+        isActive: true,
+        date: new Date(),
+        location: 'Default Location',
       },
     });
+    console.log('Default active event created.');
   }
-
-  console.log('Seed completed:', { admin: admin.username, event: event.name });
 }
 
 main().catch((e) => {

@@ -10,6 +10,7 @@ build/
 .next/
 out/
 coverage/
+*.tsbuildinfo
 
 # Logs
 npm-debug.log*
@@ -17,6 +18,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.log
+logs/
+apps/backend/logs/
 
 # Env files
 .env
@@ -31,3 +34,21 @@ Thumbs.db
 *.swo
 .idea/
 .vscode/
+.trae/
+
+# Uploaded files (user data)
+apps/backend/uploads/
+uploads/
+
+# Data files
+*.xlsx
+*.xls
+*.csv
+data_tamu_*.xlsx
+
+# Word documents
+word/
+
+# Docker volumes data
+data/
+postgres-data/

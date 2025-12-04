@@ -37,4 +37,23 @@ export class QueryGuestsDto {
   @IsOptional()
   @IsString()
   eventId?: string;
+
+  // Cursor-based pagination
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number = 20;
+
+  @IsOptional()
+  @IsString()
+  sortBy?: string = 'queueNumber';
+
+  @IsOptional()
+  @IsString()
+  sortOrder?: 'asc' | 'desc' = 'asc';
 }

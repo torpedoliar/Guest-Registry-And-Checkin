@@ -44,4 +44,4 @@ try {
 } catch {}
 
 Write-Host 'Launched backend (port 4000) and frontend (port 3000).'
-Write-Host 'If your backend is on a different host/port, set BACKEND_ORIGIN or NEXT_PUBLIC_API_BASE_URL in apps/frontend/.env.'
+Write-Host 'If your backend is on a different host/port, set BACKEND_ORIGIN atau NEXT_PUBLIC_API_BASE_URL di apps/frontend/.env.'

@@ -9,15 +9,19 @@ export default {
     extend: {
       colors: {
         brand: {
-          primary: '#2563eb',
-          primarySoft: '#dbeafe',
-          accent: '#22c55e',
-          danger: '#ef4444',
-          surface: '#ffffff',
-          surfaceMuted: '#f8fafc',
-          border: '#e2e8f0',
-          text: '#0f172a',
-          textMuted: '#6b7280',
+          primary: '#3B82F6',
+          primarySoft: '#DBEAFE',
+          secondary: '#1E3A8A',
+          accent: '#10B981',
+          success: '#10B981',
+          warning: '#F59E0B',
+          danger: '#EF4444',
+          info: '#3B82F6',
+          surface: '#FFFFFF',
+          surfaceMuted: '#F8FAFC',
+          border: '#E2E8F0',
+          text: '#0F172A',
+          textMuted: '#6B7280',
         },
       },
       fontFamily: {
@@ -31,6 +35,13 @@ export default {
       boxShadow: {
         soft: '0 12px 30px rgba(15,23,42,0.08)',
         card: '0 18px 45px rgba(15,23,42,0.12)',
+        glass: '0 18px 45px rgba(15,23,42,0.25)',
+      },
+      transitionDuration: {
+        fast: '150ms',
+      },
+      transitionTimingFunction: {
+        smooth: 'cubic-bezier(0.4, 0, 0.2, 1)',
       },
     },
   },

@@ -1,5 +1,6 @@
-import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, IsEnum, Min } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
+import { GuestCategory } from './create-guest.dto';
 
 export class UpdateGuestDto {
   @IsOptional()
@@ -30,7 +31,19 @@ export class UpdateGuestDto {
 
   @IsOptional()
   @IsString()
+  department?: string | null;
+
+  @IsOptional()
+  @IsString()
+  division?: string;
+
+  @IsOptional()
+  @IsString()
   notes?: string | null;
+
+  @IsOptional()
+  @IsEnum(GuestCategory)
+  category?: GuestCategory;
 
   @IsOptional()
   @IsBoolean()
@@ -40,4 +53,9 @@ export class UpdateGuestDto {
   @IsOptional()
   @IsDateString()
   checkedInAt?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => (typeof value === 'string' ? value === 'true' : value))
+  souvenirTaken?: boolean;
 }

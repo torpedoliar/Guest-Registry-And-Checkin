@@ -1,13 +1,26 @@
 "use client";
 import RequireAuth from '../../../components/RequireAuth';
-import { useEffect, useState } from 'react';
-import { apiFetch, apiBase } from '../../../lib/api';
-import WebcamCapture from '../../../components/WebcamCapture';
+import { useEffect, useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import { apiFetch, apiBase, toApiUrl } from '../../../lib/api';
+import { useGuestStats, useActiveEvent, useInvalidateQueries } from '../../../lib/hooks/use-guests';
+import Card from '../../../components/ui/Card';
+import Input from '../../../components/ui/Input';
+import Button from '../../../components/ui/Button';
+import Label from '../../../components/ui/Label';
+import { SkeletonStats, SkeletonCard } from '../../../components/ui/Skeleton';
+import { Calendar, MapPin, TrendingUp, Radio } from 'lucide-react';
+import { useSSE } from '../../../lib/sse-context';
 
-type Stats = { total: number; checkedIn: number; notCheckedIn: number };
+// Lazy load heavy components
+const WebcamCapture = lazy(() => import('../../../components/WebcamCapture'));
+const GuestStatsChart = lazy(() => import('../../../components/GuestStatsChart'));
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
+  // Use React Query for data fetching with caching
+  const { data: stats, error: statsError, isLoading: statsLoading } = useGuestStats();
+  const { data: event } = useActiveEvent();
+  const { invalidateStats, invalidateAll } = useInvalidateQueries();
+  
   const [error, setError] = useState<string | null>(null);
   // Quick add form state
   const [guestId, setGuestId] = useState('');
@@ -25,21 +38,30 @@ export default function DashboardPage() {
   const [busyPublic, setBusyPublic] = useState(false);
   const [busyAdminCheck, setBusyAdminCheck] = useState(false);
   const [busyAdminUncheck, setBusyAdminUncheck] = useState(false);
+  const { addEventListener, removeEventListener, connected } = useSSE();
 
+  // Set error from statsError
   useEffect(() => {
-    apiFetch<Stats>('/guests/stats').then(setStats).catch((e) => setError(e.message));
-  }, []);
+    if (statsError) setError((statsError as Error).message);
+  }, [statsError]);
 
-  // Realtime refresh stats when check-in/uncheckin occurs
+  // Realtime refresh stats when check-in/uncheckin occurs or event changes
   useEffect(() => {
-    const es = new EventSource(`${apiBase()}/public/stream`);
-    const onChange = async () => {
-      try { const s = await apiFetch<Stats>('/guests/stats'); setStats(s); } catch {}
+    const onChange = () => { invalidateStats(); };
+    const onEventChange = () => { invalidateAll(); };
+    addEventListener('checkin', onChange);
+    addEventListener('uncheckin', onChange);
+    addEventListener('guest-update', onChange);
+    addEventListener('event_change', onEventChange);
+    addEventListener('config', onEventChange);
+    return () => {
+      removeEventListener('checkin', onChange);
+      removeEventListener('uncheckin', onChange);
+      removeEventListener('guest-update', onChange);
+      removeEventListener('event_change', onEventChange);
+      removeEventListener('config', onEventChange);
     };
-    es.addEventListener('checkin', onChange as any);
-    es.addEventListener('uncheckin', onChange as any);
-    return () => { es.close(); };
-  }, []);
+  }, [addEventListener, removeEventListener, invalidateStats, invalidateAll]);
 
   useEffect(() => {
     if (!photo) { setPreview(null); return; }
@@ -48,238 +70,452 @@ export default function DashboardPage() {
     return () => URL.revokeObjectURL(url);
   }, [photo]);
 
+  const checkinPercent = useMemo(() => 
+    stats ? (stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0) : 0,
+    [stats]
+  );
+
   return (
     <RequireAuth>
-      <div className="min-h-screen">
-        <div className="mx-auto max-w-5xl p-6 md:p-8 space-y-6">
-          <h1 className="text-2xl md:text-3xl font-bold text-white text-shadow-lg">Dashboard</h1>
-          {error && <div className="text-brand-danger text-sm">{error}</div>}
+      <div className="min-h-screen p-4 md:p-8">
+        <div className="mx-auto max-w-7xl space-y-6">
+          {/* Header */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                <TrendingUp size={24} className="text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">Dashboard</h1>
+                <div className="flex items-center gap-2 mt-1">
+                  <Radio size={12} className={`${connected ? 'text-emerald-400 pulse-live' : 'text-red-400'}`} />
+                  <span className="text-sm text-white/60">{connected ? 'Realtime Connected' : 'Reconnecting...'}</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Quick Actions */}
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5"
+                href="/admin/statistics"
+              >
+                <BarChart3 size={16} />
+                Statistik
+              </a>
+              <a
+                className="inline-flex items-center gap-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 transition-all duration-200"
+                href="/admin/guests"
+              >
+                <Users size={16} />
+                Tamu
+              </a>
+              <a
+                className="inline-flex items-center gap-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 transition-all duration-200"
+                href="/luckydraw"
+              >
+                <Dices size={16} />
+                Lucky Draw
+              </a>
+              <a
+                className="inline-flex items-center gap-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 transition-all duration-200"
+                href="/souvenir"
+              >
+                <Package size={16} />
+                Souvenir
+              </a>
+              <a
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5"
+                href="/checkin"
+                target="_blank"
+              >
+                <ExternalLink size={16} />
+                Kiosk
+              </a>
+              <a
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5"
+                href="/show"
+                target="_blank"
+              >
+                <Monitor size={16} />
+                Display
+              </a>
+              <a
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5"
+                href="/show/my"
+                target="_blank"
+              >
+                <User size={16} />
+                My Display
+              </a>
+            </div>
+          </div>
 
-          {stats && (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Card title="Total Tamu" value={stats.total} />
-              <Card title="Sudah Check-in" value={stats.checkedIn} />
-              <Card title="Belum Check-in" value={stats.notCheckedIn} />
+          {error && (
+            <div className="text-red-300 text-sm bg-red-500/10 p-4 rounded-xl border border-red-500/20 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0">
+                <XCircle size={18} className="text-red-400" />
+              </div>
+              {error}
             </div>
           )}
 
-          {/* Quick actions */}
-          <div className="flex flex-wrap items-center gap-3 text-sm text-brand-textMuted">
-            <a
-              className="inline-flex items-center rounded-full bg-brand-surface px-3 py-1 text-sm font-medium text-brand-text shadow-soft hover:bg-brand-primarySoft"
-              href="/admin/guests"
-            >
-              Kelola Tamu
-            </a>
-            <span className="text-brand-border">•</span>
-            <a
-              className="inline-flex items-center rounded-full bg-brand-surface px-3 py-1 text-sm font-medium text-brand-text shadow-soft hover:bg-brand-primarySoft"
-              href="/admin/guests/new"
-            >
-              Tambah Tamu (Halaman Penuh)
-            </a>
-            <span className="text-brand-border">•</span>
-            <a
-              className="inline-flex items-center rounded-full bg-brand-surface px-3 py-1 text-sm font-medium text-brand-text shadow-soft hover:bg-brand-primarySoft"
-              href="/checkin"
-              target="_blank"
-            >
-              Halaman Check-in Publik
-            </a>
-            <span className="text-brand-border">•</span>
-            <a
-              className="inline-flex items-center rounded-full bg-brand-surface px-3 py-1 text-sm font-medium text-brand-text shadow-soft hover:bg-brand-primarySoft"
-              href="/show"
-              target="_blank"
-            >
-              Layar Display
-            </a>
-          </div>
+          {/* Stats Cards */}
+          {statsLoading ? (
+            <SkeletonStats />
+          ) : stats ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatsCard 
+                title="Total Tamu" 
+                value={stats.total} 
+                icon={<Users size={24} />} 
+                color="blue"
+                subtitle="Terdaftar"
+              />
+              <StatsCard 
+                title="Sudah Check-in" 
+                value={stats.checkedIn} 
+                icon={<CheckCircle size={24} />} 
+                color="emerald"
+                subtitle={`${checkinPercent}% dari total`}
+              />
+              <StatsCard 
+                title="Belum Check-in" 
+                value={stats.notCheckedIn} 
+                icon={<Clock size={24} />} 
+                color="amber"
+                subtitle="Menunggu"
+              />
+              <StatsCard 
+                title="Progress" 
+                value={`${checkinPercent}%`} 
+                icon={<TrendingUp size={24} />} 
+                color="purple"
+                subtitle="Kehadiran"
+                isPercent
+                percent={checkinPercent}
+              />
+            </div>
+          ) : null}
 
-          {/* Portal Actions */}
-          <div className="max-w-2xl rounded-xl border border-brand-border bg-brand-surface p-5 shadow-soft">
-            <div className="mb-3 text-lg font-semibold text-brand-text">Portal Actions</div>
-            {error && <div className="mb-2 text-sm text-brand-danger">{error}</div>}
-            {message && <div className="mb-2 text-sm text-brand-accent">{message}</div>}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Public Check-in (by Guest ID)</div>
-              <div className="flex gap-2">
-                <input
-                  value={publicGuestId}
-                  onChange={(e)=>setPublicGuestId(e.target.value)}
-                  placeholder="Guest ID"
-                  className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
-                />
-                <button disabled={busyPublic || !publicGuestId} onClick={async ()=>{
-                  setError(null); setMessage(null); setBusyPublic(true);
-                  try {
-                    const res = await fetch(`${apiBase()}/public/guests/checkin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guestId: publicGuestId }) });
-                    if (!res.ok) throw new Error(await res.text());
-                    setMessage('Check-in publik berhasil.');
-                    setPublicGuestId('');
-                  } catch(e:any) { setError(e.message||'Gagal check-in publik'); } finally { setBusyPublic(false); }
-                }} className="inline-flex items-center justify-center rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white shadow-soft hover:bg-blue-600 disabled:opacity-50">{busyPublic ? 'Memproses...' : 'Check-in'}</button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Admin Check-in (by Guest ID)</div>
-              <div className="flex gap-2">
-                <input
-                  value={adminGuestId}
-                  onChange={(e)=>setAdminGuestId(e.target.value)}
-                  placeholder="Guest ID"
-                  className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
-                />
-                <button disabled={busyAdminCheck || !adminGuestId} onClick={async ()=>{
-                  setError(null); setMessage(null); setBusyAdminCheck(true);
-                  try {
-                    // Find by guestId using public search (exact first)
-                    const r = await fetch(`${apiBase()}/public/guests/search?guestId=${encodeURIComponent(adminGuestId)}`);
-                    if (!r.ok) throw new Error(await r.text());
-                    const arr = await r.json();
-                    const g = arr && arr[0];
-                    if (!g) throw new Error('Guest tidak ditemukan');
-                    await apiFetch(`/guests/${g.id}/checkin`, { method: 'POST' });
-                    setMessage(`Check-in admin berhasil untuk ${g.name}`);
-                  } catch(e:any) { setError(e.message||'Gagal check-in admin'); } finally { setBusyAdminCheck(false); }
-                }} className="inline-flex items-center justify-center rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white shadow-soft hover:bg-blue-600 disabled:opacity-50">{busyAdminCheck ? 'Memproses...' : 'Check-in'}</button>
-              </div>
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <div className="text-sm font-medium">Admin Uncheck-in (by Guest ID)</div>
-              <div className="flex gap-2">
-                <input value={adminGuestId} onChange={(e)=>setAdminGuestId(e.target.value)} placeholder="Guest ID" className="border rounded p-2 w-full" />
-                <button disabled={busyAdminUncheck || !adminGuestId} onClick={async ()=>{
-                  setError(null); setMessage(null); setBusyAdminUncheck(true);
-                  try {
-                    const r = await fetch(`${apiBase()}/public/guests/search?guestId=${encodeURIComponent(adminGuestId)}`);
-                    if (!r.ok) throw new Error(await r.text());
-                    const arr = await r.json(); const g = arr && arr[0];
-                    if (!g) throw new Error('Guest tidak ditemukan');
-                    await apiFetch(`/guests/${g.id}/uncheckin`, { method: 'POST' });
-                    setMessage(`Uncheck-in admin berhasil untuk ${g.name}`);
-                  } catch(e:any) { setError(e.message||'Gagal uncheck-in admin'); } finally { setBusyAdminUncheck(false); }
-                }} className="inline-flex items-center justify-center rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white shadow-soft hover:bg-blue-600 disabled:opacity-50">{busyAdminUncheck ? 'Memproses...' : 'Uncheck-in'}</button>
-              </div>
-            </div>
-          </div>
-          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Column 1: Stats & Event Details */}
+            <div className="space-y-6">
+              {stats && (
+                <Suspense fallback={<SkeletonCard />}>
+                  <GuestStatsChart stats={stats} />
+                </Suspense>
+              )}
 
-          {/* Quick Add Guest */}
-          <div className="max-w-2xl rounded-xl border border-brand-border bg-brand-surface p-5 shadow-soft">
-            <div className="mb-3 text-lg font-semibold text-brand-text">Quick Add Guest</div>
-            {message && <div className="mb-2 text-sm text-brand-accent">{message}</div>}
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setMessage(null);
-              setSaving(true);
-              try {
-                const fd = new FormData();
-                fd.append('guestId', guestId);
-                fd.append('name', name);
-                fd.append('tableLocation', tableLocation);
-                if (company) fd.append('company', company);
-                if (photo) fd.append('photo', photo);
-                const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-                const res = await fetch(`${apiBase()}/guests`, {
-                  method: 'POST',
-                  headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                  body: fd,
-                });
-                if (!res.ok) throw new Error(await res.text());
-                // Clear fields
-                setGuestId('');
-                setName('');
-                setTableLocation('');
-                setCompany('');
-                setPhoto(null);
-                setMessage('Tamu berhasil ditambahkan.');
-                // refresh stats
-                apiFetch<Stats>('/guests/stats').then(setStats).catch(() => {});
-              } catch (e: any) {
-                setError(e.message || 'Gagal menambahkan tamu');
-              } finally {
-                setSaving(false);
-              }
-            }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3"
-          >
-            <div>
-              <label className="mb-1 block text-sm text-brand-textMuted">Guest ID</label>
-              <input
-                value={guestId}
-                onChange={(e)=>setGuestId(e.target.value)}
-                className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-brand-textMuted">Nama</label>
-              <input
-                value={name}
-                onChange={(e)=>setName(e.target.value)}
-                className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-brand-textMuted">Meja/Ruangan</label>
-              <input
-                value={tableLocation}
-                onChange={(e)=>setTableLocation(e.target.value)}
-                className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-brand-textMuted">Perusahaan/Organisasi (opsional)</label>
-              <input
-                value={company}
-                onChange={(e)=>setCompany(e.target.value)}
-                className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm text-brand-textMuted">Foto (opsional)</label>
-              <input type="file" accept="image/*" capture="environment" onChange={(e)=>setPhoto(e.target.files?.[0]||null)} />
-              <button
-                type="button"
-                onClick={()=>setWebcamOpen(true)}
-                className="ml-2 inline-flex items-center justify-center rounded-lg border border-brand-border bg-brand-surface px-3 py-1 text-xs font-medium text-brand-text hover:bg-brand-surfaceMuted"
-              >
-                Ambil via Webcam
-              </button>
-              {preview && (
-                <div className="mt-2">
-                  <img src={preview} alt="preview" className="h-20 w-20 object-cover rounded" />
-                </div>
+              {event && (
+                <Card variant="glass" className="w-full p-6">
+                  <div className="flex flex-col items-center text-center gap-4">
+                    {event.logoUrl ? (
+                      <img src={event.logoUrl} alt="Event Logo" className="h-24 w-24 object-contain bg-white/5 rounded-xl p-2" />
+                    ) : (
+                      <div className="h-24 w-24 flex items-center justify-center bg-white/5 rounded-xl text-white/20">
+                        <Gift size={40} />
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <h2 className="text-xl font-bold text-white">{event.name}</h2>
+                      <div className="flex flex-col items-center gap-1 text-sm text-white/70">
+                        {event.date && (
+                          <div className="flex items-center gap-2">
+                            <Calendar size={14} className="text-brand-primary" />
+                            <span>{new Date(event.date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                          </div>
+                        )}
+                        {event.location && (
+                          <div className="flex items-center gap-2">
+                            <MapPin size={14} className="text-brand-accent" />
+                            <span>{event.location}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
               )}
             </div>
-            <div className="md:col-span-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="inline-flex items-center justify-center rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white shadow-soft hover:bg-blue-600 disabled:opacity-50"
-              >
-                {saving ? 'Menyimpan...' : 'Tambah Tamu'}
-              </button>
+
+            {/* Column 2: Quick Add Guest */}
+            <div className="space-y-6">
+              <Card variant="glass" className="w-full h-full">
+                <div className="mb-4 flex items-center gap-2 text-lg font-semibold text-white border-b border-white/10 pb-2">
+                  <UserPlus size={20} />
+                  Quick Add Guest
+                </div>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setMessage(null);
+                    setSaving(true);
+                    try {
+                      const fd = new FormData();
+                      fd.append('guestId', guestId);
+                      fd.append('name', name);
+                      fd.append('tableLocation', tableLocation);
+                      if (company) fd.append('company', company);
+                      if (photo) fd.append('photo', photo);
+                      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+                      const res = await fetch(`${apiBase()}/guests`, {
+                        method: 'POST',
+                        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                        body: fd,
+                      });
+                      if (!res.ok) throw new Error(await res.text());
+                      setGuestId('');
+                      setName('');
+                      setTableLocation('');
+                      setCompany('');
+                      setPhoto(null);
+                      setMessage('Tamu berhasil ditambahkan.');
+                      invalidateStats();
+                    } catch (e: any) {
+                      setError(e.message || 'Gagal menambahkan tamu');
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  className="flex flex-col gap-4"
+                >
+                  <div>
+                    <Label className="mb-1" htmlFor="quick-guest-id">Guest ID</Label>
+                    <Input
+                      id="quick-guest-id"
+                      value={guestId}
+                      onChange={(e) => setGuestId(e.target.value)}
+                      required
+                      className="font-mono"
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1" htmlFor="quick-name">Nama</Label>
+                    <Input
+                      id="quick-name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1" htmlFor="quick-table">Meja/Ruangan</Label>
+                    <Input
+                      id="quick-table"
+                      value={tableLocation}
+                      onChange={(e) => setTableLocation(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1" htmlFor="quick-company">Perusahaan (opsional)</Label>
+                    <Input
+                      id="quick-company"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1">Foto (opsional)</Label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={(e) => setPhoto(e.target.files?.[0] || null)}
+                        className="flex-1 min-w-0 text-sm text-white/70 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-surface file:text-brand-text hover:file:bg-brand-surfaceMuted cursor-pointer"
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => setWebcamOpen(true)}
+                        variant="secondary"
+                        size="sm"
+                        className="shrink-0 flex items-center gap-2"
+                      >
+                        <Camera size={16} />
+                        Webcam
+                      </Button>
+                    </div>
+                    {preview && (
+                      <div className="mt-3">
+                        <img src={preview} alt="preview" className="h-20 w-20 object-cover rounded-lg border border-white/20" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="pt-2">
+                    <Button type="submit" disabled={saving} size="md" className="w-full flex items-center justify-center gap-2">
+                      {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                      {saving ? 'Menyimpan...' : 'Tambah Tamu'}
+                    </Button>
+                  </div>
+                </form>
+                {webcamOpen && (
+                  <Suspense fallback={null}>
+                    <WebcamCapture open={webcamOpen} onClose={() => setWebcamOpen(false)} onCapture={(file) => { setPhoto(file); }} aspect="square" />
+                  </Suspense>
+                )}
+              </Card>
             </div>
-          </form>
-          <WebcamCapture open={webcamOpen} onClose={()=>setWebcamOpen(false)} onCapture={(file)=>{ setPhoto(file); }} aspect="square" />
-        </div>
+
+            {/* Column 3: Portal Actions */}
+            <div className="space-y-6">
+              <Card variant="glass" className="w-full">
+                <div className="mb-4 flex items-center gap-2 text-lg font-semibold text-white border-b border-white/10 pb-2">
+                  <Activity size={20} />
+                  Portal Actions
+                </div>
+                {message && <div className="mb-4 text-sm text-brand-accent bg-brand-primary/10 p-3 rounded-lg border border-brand-primary/20">{message}</div>}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-white/90">Public Check-in (by Guest ID)</div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={publicGuestId}
+                        onChange={(e) => setPublicGuestId(e.target.value)}
+                        placeholder="Guest ID"
+                        className="font-mono"
+                      />
+                      <Button
+                        size="sm"
+                        disabled={busyPublic || !publicGuestId}
+                        onClick={async () => {
+                          setError(null); setMessage(null); setBusyPublic(true);
+                          try {
+                            const res = await fetch(`${apiBase()}/public/guests/checkin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guestId: publicGuestId }) });
+                            if (!res.ok) throw new Error(await res.text());
+                            setMessage('Check-in publik berhasil.');
+                            setPublicGuestId('');
+                          } catch (e: any) { setError(e.message || 'Gagal check-in publik'); } finally { setBusyPublic(false); }
+                        }}
+                      >
+                        {busyPublic ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16} />}
+                        <span className="ml-2">Check-in</span>
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-white/90">Admin Check-in (by Guest ID)</div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={adminGuestId}
+                        onChange={(e) => setAdminGuestId(e.target.value)}
+                        placeholder="Guest ID"
+                        className="font-mono"
+                      />
+                      <Button
+                        size="sm"
+                        disabled={busyAdminCheck || !adminGuestId}
+                        onClick={async () => {
+                          setError(null); setMessage(null); setBusyAdminCheck(true);
+                          try {
+                            const r = await fetch(`${apiBase()}/public/guests/search?guestId=${encodeURIComponent(adminGuestId)}`);
+                            if (!r.ok) throw new Error(await r.text());
+                            const arr = await r.json();
+                            const g = arr && arr[0];
+                            if (!g) throw new Error('Guest tidak ditemukan');
+                            await apiFetch(`/guests/${g.id}/checkin`, { method: 'POST' });
+                            setMessage(`Check-in admin berhasil untuk ${g.name}`);
+                          } catch (e: any) { setError(e.message || 'Gagal check-in admin'); } finally { setBusyAdminCheck(false); }
+                        }}
+                      >
+                        {busyAdminCheck ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16} />}
+                        <span className="ml-2">Check-in</span>
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-white/90">Admin Uncheck-in (by Guest ID)</div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={adminGuestId}
+                        onChange={(e) => setAdminGuestId(e.target.value)}
+                        placeholder="Guest ID"
+                        className="font-mono"
+                      />
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={busyAdminUncheck || !adminGuestId}
+                        onClick={async () => {
+                          setError(null); setMessage(null); setBusyAdminUncheck(true);
+                          try {
+                            const r = await fetch(`${apiBase()}/public/guests/search?guestId=${encodeURIComponent(adminGuestId)}`);
+                            if (!r.ok) throw new Error(await r.text());
+                            const arr = await r.json(); const g = arr && arr[0];
+                            if (!g) throw new Error('Guest tidak ditemukan');
+                            await apiFetch(`/guests/${g.id}/uncheckin`, { method: 'POST' });
+                            setMessage(`Uncheck-in admin berhasil untuk ${g.name}`);
+                          } catch (e: any) { setError(e.message || 'Gagal uncheck-in admin'); } finally { setBusyAdminUncheck(false); }
+                        }}
+                      >
+                        {busyAdminUncheck ? <Loader2 className="animate-spin" size={16} /> : <XCircle size={16} />}
+                        <span className="ml-2">Uncheck-in</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
         </div>
       </div>
     </RequireAuth>
   );
 }
 
-function Card({ title, value }: { title: string; value: number }) {
+const colorMap: Record<string, { bg: string; text: string; border: string }> = {
+  blue: { bg: 'from-blue-500/20 to-blue-600/10', text: 'text-blue-400', border: 'border-blue-500/20' },
+  emerald: { bg: 'from-emerald-500/20 to-emerald-600/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
+  amber: { bg: 'from-amber-500/20 to-amber-600/10', text: 'text-amber-400', border: 'border-amber-500/20' },
+  purple: { bg: 'from-purple-500/20 to-purple-600/10', text: 'text-purple-400', border: 'border-purple-500/20' },
+};
+
+function StatsCard({ 
+  title, 
+  value, 
+  icon, 
+  color = 'blue', 
+  subtitle,
+  isPercent,
+  percent 
+}: { 
+  title: string; 
+  value: number | string; 
+  icon?: React.ReactNode;
+  color?: 'blue' | 'emerald' | 'amber' | 'purple';
+  subtitle?: string;
+  isPercent?: boolean;
+  percent?: number;
+}) {
+  const colors = colorMap[color];
+  
   return (
-    <div className="rounded-xl border border-brand-border bg-brand-surface p-4 shadow-soft">
-      <div className="text-sm text-brand-textMuted">{title}</div>
-      <div className="text-3xl font-semibold text-brand-text">{value}</div>
+    <div className={`stats-card glass-card p-5 border ${colors.border}`}>
+      <div className="flex items-start justify-between mb-3">
+        <div className={`p-2.5 rounded-xl bg-gradient-to-br ${colors.bg}`}>
+          <div className={colors.text}>{icon}</div>
+        </div>
+        {subtitle && (
+          <span className="text-xs text-white/50 font-medium">{subtitle}</span>
+        )}
+      </div>
+      <div>
+        <div className="text-sm font-medium text-white/60 mb-1">{title}</div>
+        <div className="text-3xl font-bold text-white">{value}</div>
+      </div>
+      {isPercent && percent !== undefined && (
+        <div className="mt-3">
+          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className={`h-full bg-gradient-to-r ${color === 'purple' ? 'from-purple-500 to-pink-500' : 'from-blue-500 to-cyan-500'} transition-all duration-500`}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+import { Users, UserPlus, ExternalLink, Monitor, Activity, CheckCircle, XCircle, Loader2, Camera, Save, Clock, Gift, BarChart3, Package, Dices, User } from 'lucide-react';

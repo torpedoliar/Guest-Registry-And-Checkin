@@ -1,0 +1,98 @@
+"use client";
+
+import { memo, useMemo } from 'react';
+import { PieChart, Pie, Cell, Tooltip, Legend, Label } from 'recharts';
+import Card from './ui/Card';
+
+type Stats = { total: number; checkedIn: number; notCheckedIn: number };
+
+interface GuestStatsChartProps {
+    stats: Stats;
+}
+
+// Modern Palette
+const COLORS = [
+    '#34d399', // Emerald-400 (Checked In)
+    '#f472b6', // Pink-400 (Not Checked In) - more vibrant contrast
+];
+
+function GuestStatsChart({ stats }: GuestStatsChartProps) {
+    const data = useMemo(() => [
+        { name: 'Sudah Check-in', value: stats.checkedIn },
+        { name: 'Belum Check-in', value: stats.notCheckedIn },
+    ], [stats.checkedIn, stats.notCheckedIn]);
+
+    const attendanceRate = useMemo(() => 
+        stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0,
+        [stats.total, stats.checkedIn]
+    );
+
+    return (
+        <Card variant="glass" className="w-full flex flex-col p-5">
+            <div className="mb-2 flex items-center justify-between border-b border-white/10 pb-3">
+                <div>
+                    <h3 className="text-lg font-bold text-white">Statistik Kedatangan</h3>
+                    <p className="text-xs text-white/60">Real-time update</p>
+                </div>
+                <div className="text-right">
+                    <div className="text-2xl font-bold text-emerald-400">{attendanceRate}%</div>
+                    <div className="text-xs text-white/60">Kehadiran</div>
+                </div>
+            </div>
+
+            <div className="w-full flex items-center justify-center relative h-[200px]">
+                <PieChart width={200} height={200}>
+                    <Pie
+                        data={data}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={75}
+                        paddingAngle={5}
+                        dataKey="value"
+                        stroke="none"
+                    >
+                        {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                        <Label
+                            value={`${stats.checkedIn} / ${stats.total}`}
+                            position="center"
+                            className="fill-white text-lg font-bold"
+                        />
+                    </Pie>
+                    <Tooltip
+                        content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                    <div className="bg-slate-900/90 border border-white/10 p-3 rounded-lg shadow-xl backdrop-blur-md">
+                                        <p className="text-sm font-medium text-white mb-1">{data.name}</p>
+                                        <p className="text-lg font-bold" style={{ color: payload[0].color }}>
+                                            {data.value} Tamu
+                                        </p>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        }}
+                    />
+                </PieChart>
+
+                {/* Custom Legend Overlay */}
+                <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-6 text-sm">
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-[#34d399]" />
+                        <span className="text-white/80">Sudah Check-in</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-[#f472b6]" />
+                        <span className="text-white/80">Belum Check-in</span>
+                    </div>
+                </div>
+            </div>
+        </Card>
+    );
+}
+
+export default memo(GuestStatsChart);

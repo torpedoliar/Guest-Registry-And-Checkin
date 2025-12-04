@@ -11,33 +11,41 @@ type EventConfig = {
   logoUrl?: string | null;
 };
 
+import { useSSE } from '../lib/sse-context';
+
 export default function ThemeBackground() {
   const [cfg, setCfg] = useState<EventConfig | null>(null);
   const [override, setOverride] = useState<Partial<EventConfig> | null>(null);
   const pathname = usePathname();
+  const { addEventListener, removeEventListener } = useSSE();
 
   // Exclude pages that manage their own background
   const excluded = pathname?.startsWith('/show') || pathname?.startsWith('/checkin');
 
   useEffect(() => {
     if (excluded) return;
-    let es: EventSource | null = null;
+
     (async () => {
       try {
         const r = await fetch(`${apiBase()}/config/event`);
         if (r.ok) setCfg(await r.json());
-      } catch {}
-      es = new EventSource(`${apiBase()}/public/stream`);
-      const onConfig = (e: MessageEvent) => {
-        try { const data = JSON.parse((e as any).data); setCfg(data); } catch {}
-      };
-      const onPreview = (e: MessageEvent) => {
-        try { const data = JSON.parse((e as any).data); setOverride(data || null); } catch {}
-      };
-      es.addEventListener('config', onConfig as any);
-      es.addEventListener('preview', onPreview as any);
+      } catch { }
     })();
-    return () => { if (es) es.close(); };
+
+    const onConfig = (e: MessageEvent) => {
+      try { const data = JSON.parse((e as any).data); setCfg(data); } catch { }
+    };
+    const onPreview = (e: MessageEvent) => {
+      try { const data = JSON.parse((e as any).data); setOverride(data || null); } catch { }
+    };
+
+    addEventListener('config', onConfig);
+    addEventListener('preview', onPreview);
+
+    return () => {
+      removeEventListener('config', onConfig);
+      removeEventListener('preview', onPreview);
+    };
   }, [excluded]);
 
   // Live preview override (e.g., from settings page)

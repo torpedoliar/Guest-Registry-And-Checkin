@@ -1,5 +1,11 @@
-import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsArray, Max, Min, ValidateIf } from 'class-validator';
 import { EventBackgroundType } from '@prisma/client';
+
+export interface CustomCategory {
+  value: string;
+  label: string;
+  color: string;
+}
 
 export class UpdateEventDto {
   @IsOptional()
@@ -7,14 +13,17 @@ export class UpdateEventDto {
   name?: string;
 
   @IsOptional()
+  @ValidateIf((o) => o.date !== null && o.date !== '')
   @IsDateString()
-  date?: string;
+  date?: string | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.location !== null)
   @IsString()
-  location?: string;
+  location?: string | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.logoUrl !== null)
   @IsString()
   logoUrl?: string | null;
 
@@ -23,10 +32,12 @@ export class UpdateEventDto {
   backgroundType?: EventBackgroundType;
 
   @IsOptional()
+  @ValidateIf((o) => o.backgroundImageUrl !== null)
   @IsString()
   backgroundImageUrl?: string | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.backgroundVideoUrl !== null)
   @IsString()
   backgroundVideoUrl?: string | null;
 
@@ -41,4 +52,24 @@ export class UpdateEventDto {
   @Min(1000)
   @Max(600000)
   checkinPopupTimeoutMs?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  enablePhotoCapture?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableLuckyDraw?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableSouvenir?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowDuplicateGuestId?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  customCategories?: CustomCategory[];
 }

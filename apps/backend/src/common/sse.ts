@@ -4,7 +4,17 @@ export type ServerEvent =
   | { type: 'checkin'; data: any }
   | { type: 'uncheckin'; data: any }
   | { type: 'config'; data: any }
-  | { type: 'preview'; data: any | null };
+  | { type: 'preview'; data: any | null }
+  | { type: 'prize_draw'; data: any }
+  | { type: 'prize_reset'; data: any }
+  | { type: 'guest-update'; data: any }
+  | { type: 'souvenir_given'; data: any }
+  | { type: 'souvenir_removed'; data: any }
+  | { type: 'souvenir_reset'; data: any }
+  | { type: 'prize_collected'; data: any }
+  | { type: 'prize_uncollected'; data: any }
+  | { type: 'guest_created_souvenir'; data: any }
+  | { type: 'event_change'; data: any };
 
 const emitter = new EventEmitter();
 emitter.setMaxListeners(1000);

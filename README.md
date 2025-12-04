@@ -1,142 +1,239 @@
-# Guest Registration App
+# Guest Registration & Check-in System
 
-Monorepo: NestJS (backend) + Next.js (frontend) + Prisma (PostgreSQL).
+A comprehensive, enterprise-grade solution for event guest management, real-time check-in, and public display. Built with a modern tech stack ensuring performance, scalability, and a premium user experience.
 
-## Apa itu proyek ini?
+![Project Banner](https://placehold.co/1200x300/1e293b/white?text=Guest+Registration+System)
 
-Aplikasi registrasi & check-in tamu untuk acara/event. Panitia bisa mengelola data tamu, melakukan check-in, dan menampilkan layar display publik yang real-time dan bisa diakses dari banyak perangkat (laptop, tablet, TV/layar besar).
+## 📋 Table of Contents
 
-## Fitur Utama
+1. [Project Overview](#-project-overview)
+2. [Key Features](#-key-features)
+3. [System Architecture](#-system-architecture)
+4. [Technology Stack](#-technology-stack)
+5. [Installation & Setup](#-installation--setup)
+6. [Configuration Guide](#-configuration-guide)
+7. [User Guide](#-user-guide)
+8. [API Reference](#-api-reference)
+9. [Troubleshooting](#-troubleshooting)
 
-- **Manajemen tamu**: tambah/edit/hapus tamu, import CSV, export CSV (ringkas & lengkap), statistik.
-- **Check-in real-time**: check-in dari halaman admin maupun halaman publik `/checkin`, dengan update langsung ke layar display.
-- **Branding event**: atur nama event, logo, background image/video, dan overlay untuk tampilan layar display.
-- **Layar display publik**: halaman `/show` untuk menampilkan daftar/history tamu yang baru check-in.
-- **UI glassmorphism modern**: tema visual konsisten (Tailwind + CSS variables) untuk halaman admin dan publik dengan efek blur/transparansi dan kontras teks yang dioptimalkan untuk layar besar.
-- **Akses multi-perangkat**: frontend memanggil API via path same-origin `/api`, sehingga bisa diakses lewat IP lokal (LAN) tanpa konfigurasi rumit.
+---
 
-## Flow Penggunaan (Sudut Pandang Panitia)
+## 🔭 Project Overview
 
-1. **Setup awal**
-   - Siapkan database PostgreSQL.
-   - Salin `apps/backend/.env.example` menjadi `.env` dan isi `DATABASE_URL`, `JWT_SECRET`, dan `CORS_ORIGIN`.
-   - Jalankan migrasi & seed untuk membuat schema dan data awal admin/tamu.
+This application is designed to streamline the guest registration process for corporate events, weddings, or conferences. It solves the problem of slow check-in lines and lack of real-time visibility by providing:
 
-2. **Menjalankan aplikasi di lokal**
-   - Cara paling cepat (Windows): double-click `start-dev.bat` di folder root.
-   - Atau jalankan backend & frontend secara manual (lihat bagian *Cara Menjalankan* di bawah).
+- A **Centralized Admin Dashboard** for organizers to manage guest lists and monitor attendance.
+- A **Fast Check-in Interface** for receptionists to quickly search and verify guests via QR code or name.
+- A **Public Display Screen** that welcomes guests in real-time on large projectors or TVs.
 
-3. **Konfigurasi event & branding**
-   - Buka `http://localhost:3000/admin/login` dan login sebagai admin.
-   - Atur event aktif, logo, background image/video, dan overlay di `/admin/settings/event`.
+The system is built as a monorepo containing both the Backend API (NestJS) and Frontend UI (Next.js), ensuring type safety and easy development.
 
-4. **Menyiapkan tamu**
-   - Import data tamu dari CSV di halaman `/admin/guests`.
-   - Tambah/edit tamu secara manual bila diperlukan.
+---
 
-5. **Saat hari-H acara**
-   - Gunakan `/admin/dashboard` untuk memantau statistik dan melakukan check-in cepat.
-   - Gunakan `/checkin` sebagai halaman check-in publik (tanpa login) di meja registrasi.
-   - Tampilkan `/show` di layar besar/TV sebagai display tamu yang baru check-in.
+## 🌟 Key Features
 
-6. **Setelah acara**
-   - Export data tamu (ringkas atau penuh) untuk laporan atau arsip.
-   - Opsional: purge tamu & reset branding di `/admin/settings/event` untuk event berikutnya.
+### 1. Guest Management
+- **CRUD Operations**: Add, edit, and delete guests easily.
+- **Bulk Import/Export**: Import thousands of guests via CSV. Export data for reporting.
+- **Real-time Search**: Instant search by Name, Guest ID, or Company.
+- **[Review & Improvements](docs/REVIEW.md)**: Analysis of the codebase and future enhancement suggestions.
+- **[Deployment Guide](docs/DEPLOYMENT.md)**: Manual deployment guide.
+- **[Docker All-in-One](docs/DOCKER_DEPLOY.md)**: Easy 1-click deployment using Docker.
+- **[API Documentation](docs/API.md)**: List of available API endpoints.
+### 2. Check-in Experience
+- **QR Code Scanning**: Support for webcam-based QR scanning.
+- **Instant Verification**: Visual confirmation with guest details (Name, Table, Company).
+- **Souvenir Tracking**: Separate module to track souvenir redemption.
 
-## Flowchart Aplikasi (Tingkat Tinggi)
+### 3. Event Branding
+- **Customizable UI**: Upload event logos, background images, or loop videos.
+- **Overlay System**: Add custom overlay images for the public display.
+- **Live Updates**: Changes to branding reflect instantly on all connected screens without refreshing.
+
+### 4. Public Display (`/show`)
+- **"Just Arrived" Animation**: Eye-catching animation when a guest checks in.
+- **Queue Number**: Displays a unique queue number for seating or door prizes.
+- **Glassmorphism Design**: Modern, premium aesthetic suitable for high-end events.
+
+---
+
+## 🏗 System Architecture
+
+The system follows a client-server architecture with real-time capabilities.
 
 ```mermaid
-flowchart LR
-  A[Admin Login (/admin/login)]
-  B[Konfigurasi Event & Branding (/admin/settings/event)]
-  C[Kelola & Import Tamu (/admin/guests)]
-  D[Monitoring & Quick Actions (/admin/dashboard)]
-  E[Check-in Publik (/checkin)]
-  F[Layar Display Publik (/show)]
-  G[Export Data Setelah Event]
+flowchart TB
+    subgraph Client ["Frontend (Next.js)"]
+        Admin[Admin Dashboard]
+        Checkin[Check-in Station]
+        Display[Public Display /show]
+    end
 
-  A --> B --> C
-  C --> D
-  C --> E --> F
-  C --> G
+    subgraph Server ["Backend (NestJS)"]
+        API[REST API]
+        Auth[Auth Guard]
+        Events[Event Module]
+        Guests[Guest Module]
+        SSE[SSE Stream /public/stream]
+    end
+
+    subgraph Data ["Persistence"]
+        DB[(PostgreSQL)]
+        Storage[Local File Storage]
+    end
+
+    Admin -->|HTTP| API
+    Checkin -->|HTTP| API
+    Display -->|SSE Connection| SSE
+    
+    API --> DB
+    API --> Storage
+    SSE -.->|Push Updates| Display
+    SSE -.->|Push Updates| Checkin
 ```
 
-## Arsitektur & Struktur Folder
+### Data Flow
+1. **Check-in**: Receptionist scans a QR code -> Frontend sends POST request -> Backend updates DB -> Backend pushes event via SSE.
+2. **Display**: The `/show` page receives the SSE event -> Triggers animation to show the new guest.
 
-Monorepo yang berisi backend (NestJS) dan frontend (Next.js) dalam satu repo.
+---
 
-```text
-/ (root)
-  apps/
-    backend/    # API NestJS + Prisma + uploads
-    frontend/   # Next.js App Router + Tailwind (UI)
-  docs/         # Dokumentasi proyek (API, arsitektur, URL, dsb.)
-  start-dev.*   # Skrip start cepat untuk Windows
-```
+## 💻 Technology Stack
 
-Detail arsitektur dan aliran data dijelaskan di `docs/ARCHITECTURE.md`.
+| Component | Technology | Description |
+|-----------|------------|-------------|
+| **Frontend** | Next.js 14 | App Router, Server Components, React |
+| **Styling** | Tailwind CSS | Utility-first CSS, Glassmorphism effects |
+| **Backend** | NestJS | Modular architecture, TypeScript |
+| **Database** | PostgreSQL | Relational database |
+| **ORM** | Prisma | Type-safe database access |
+| **Real-time** | Server-Sent Events | Lightweight real-time communication |
+| **Validation** | Zod / Class-validator | Robust input validation |
 
-## Cara Menjalankan (Development Lokal)
+---
 
-### Opsi A — One-Click (Windows)
+## 🚀 Installation & Setup
 
-- Double-click `start-dev.bat` di folder root.
-- Skrip akan menjalankan backend dan frontend, serta membuka browser ke `http://localhost:3000/admin/login`.
-- Pastikan Node.js >= 18 dan PostgreSQL sudah siap, dengan `.env` backend terisi benar.
+### Prerequisites
+- **Node.js**: v18 or higher.
+- **PostgreSQL**: Local installation or a cloud instance (e.g., Supabase, Neon).
 
-### Opsi B — Manual
+### One-Click Start (Windows)
+- **Development**: Double-click `start-dev.bat`.
+- **Production (Docker)**: Double-click `deploy-docker.bat`.
 
-**Backend**
+### Option B: Manual Setup
 
+#### 1. Backend Setup
 ```bash
 cd apps/backend
+
+# Install dependencies
 npm install
+
+# Configure Environment
+# Copy .env.example to .env and update DATABASE_URL
+cp .env.example .env
+
+# Run Database Migrations
 npm run prisma:migrate
 npm run prisma:generate
+
+# Seed Initial Data (Admin User)
 npm run seed
+
+# Start Server
 npm run dev
 ```
 
-**Frontend**
-
+#### 2. Frontend Setup
 ```bash
 cd apps/frontend
+
+# Install dependencies
 npm install
+
+# Start Server
 npm run dev
 ```
 
-Flow manual ini dijelaskan lebih detail di `docs/HOW_TO_START.md`.
+---
 
-## URL Penting
+## ⚙ Configuration Guide
 
-- **Publik**
-  - `http://localhost:3000/show` → layar display tamu
-  - `http://localhost:3000/checkin` → halaman check-in publik
-  - `http://localhost:3000/about` → informasi proyek & teknologi
+### Backend (`apps/backend/.env`)
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | Connection string for PostgreSQL | `postgresql://user:pass@localhost:5432/db` |
+| `JWT_SECRET` | Secret key for signing Admin tokens | `super-secret-key` |
+| `CORS_ORIGIN` | Allowed frontend origin | `http://localhost:3000` |
 
-- **Admin**
-  - `http://localhost:3000/admin/login` → login admin
-  - `http://localhost:3000/admin/dashboard` → dashboard & Portal Actions
-  - `http://localhost:3000/admin/guests` → manajemen tamu (list, import/export, edit)
-  - `http://localhost:3000/admin/settings/event` → pengaturan event & branding
+### Frontend (`apps/frontend/.env`)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BACKEND_ORIGIN` | URL of the backend API (for proxying) | `http://localhost:4000` |
+| `NEXT_PUBLIC_API_BASE_URL` | Fallback API URL for client-side | `http://localhost:4000/api` |
 
-Daftar URL lebih lengkap ada di `docs/url.md`.
+---
 
-## Konfigurasi Environment (Ringkas)
+## 📖 User Guide
 
-- **Backend (`apps/backend/.env`)**
-  - `DATABASE_URL` → koneksi PostgreSQL
-  - `JWT_SECRET` → secret untuk JWT admin
-  - `CORS_ORIGIN` → origin frontend saat development (mis. `http://localhost:3000`)
+### 1. Admin Login
+- Navigate to `/admin/login`.
+- Default credentials (from seeder): `admin` / `password` (Change this in production!).
 
-- **Frontend (`apps/frontend/.env`)**
-  - Default: memanggil API via same-origin `/api` dan diproksikan ke backend melalui Next.js rewrites.
-  - `BACKEND_ORIGIN` → opsional, target backend untuk rewrites (mis. `http://localhost:4000`).
-  - `NEXT_PUBLIC_API_BASE_URL` → opsional, fallback base URL API (mis. `http://localhost:4000/api`).
+### 2. Setting Up an Event
+- Go to **Settings > Event**.
+- Upload your **Event Logo** and **Background**.
+- Set the **Event Name**, **Date**, and **Location**.
+- These settings immediately apply to the Check-in and Display pages.
 
-## Dokumentasi Lebih Lanjut
+### 3. Importing Guests
+- Go to **Guests**.
+- Click **Import CSV**.
+- Upload a CSV file with headers: `guestId`, `name`, `email`, `company`, `table`.
 
-- `docs/HOW_TO_START.md` → panduan start lengkap + troubleshooting.
-- `docs/ARCHITECTURE.md` → arsitektur sistem dan aliran data.
-- `docs/API.md` → ringkasan endpoint API.
-- `docs/url.md` → dokumentasi URL frontend & API.
+### 4. Running Check-in
+- Open `/checkin` on a tablet or laptop at the registration desk.
+- **Scan**: Use the webcam to scan a guest's QR code.
+- **Search**: Type a name or ID if they forgot their QR code.
+- **Confirm**: Verify the details and click "Check In".
+
+### 5. Public Display
+- Open `/show` on the large screen/projector.
+- Press `F11` for fullscreen.
+- The page will automatically animate whenever a guest is checked in.
+
+---
+
+## 🔌 API Reference
+
+### Public Endpoints
+- `GET /public/guests/search?q=...`: Search for guests.
+- `POST /public/guests/checkin`: Check-in a guest.
+- `GET /public/stream`: SSE stream for real-time updates.
+
+### Admin Endpoints (Protected)
+- `GET /guests`: List all guests.
+- `POST /guests`: Create a guest.
+- `POST /guests/import`: Import CSV.
+- `GET /config/event`: Get event configuration.
+
+For full API documentation, see [docs/API.md](docs/API.md).
+
+---
+
+## ❓ Troubleshooting
+
+**Q: The camera isn't working on the Check-in page.**
+A: Browsers block webcam access on insecure origins (HTTP). If you are accessing via LAN (e.g., `http://192.168.1.5:3000`), you must enable "Insecure origins treated as secure" in `chrome://flags`.
+
+**Q: The Public Display isn't updating.**
+A: Ensure the device is connected to the network and can reach the backend. Check the browser console for SSE connection errors.
+
+**Q: I can't login.**
+A: Ensure you ran `npm run seed` to create the default admin account.
+
+---
+
+**Created by Yohanes Octavian Rizky**

@@ -2,6 +2,39 @@
 import RequireAuth from '../../../../components/RequireAuth';
 import { useEffect, useRef, useState } from 'react';
 import { apiBase, toApiUrl } from '../../../../lib/api';
+import Card from '../../../../components/ui/Card';
+import Input from '../../../../components/ui/Input';
+import Label from '../../../../components/ui/Label';
+import Button from '../../../../components/ui/Button';
+
+interface CustomCategory {
+  value: string;
+  label: string;
+  color: string;
+}
+
+const DEFAULT_CATEGORIES: CustomCategory[] = [
+  { value: 'REGULAR', label: 'Regular', color: 'text-gray-300' },
+  { value: 'VIP', label: 'VIP', color: 'text-amber-300' },
+  { value: 'VVIP', label: 'VVIP', color: 'text-purple-300' },
+  { value: 'MEDIA', label: 'Media', color: 'text-blue-300' },
+  { value: 'SPONSOR', label: 'Sponsor', color: 'text-emerald-300' },
+  { value: 'SPEAKER', label: 'Speaker', color: 'text-rose-300' },
+  { value: 'ORGANIZER', label: 'Organizer', color: 'text-cyan-300' },
+];
+
+const COLOR_OPTIONS = [
+  { value: 'text-gray-300', label: 'Gray', bg: 'bg-gray-500' },
+  { value: 'text-amber-300', label: 'Amber', bg: 'bg-amber-500' },
+  { value: 'text-purple-300', label: 'Purple', bg: 'bg-purple-500' },
+  { value: 'text-blue-300', label: 'Blue', bg: 'bg-blue-500' },
+  { value: 'text-emerald-300', label: 'Green', bg: 'bg-emerald-500' },
+  { value: 'text-rose-300', label: 'Rose', bg: 'bg-rose-500' },
+  { value: 'text-cyan-300', label: 'Cyan', bg: 'bg-cyan-500' },
+  { value: 'text-orange-300', label: 'Orange', bg: 'bg-orange-500' },
+  { value: 'text-pink-300', label: 'Pink', bg: 'bg-pink-500' },
+  { value: 'text-indigo-300', label: 'Indigo', bg: 'bg-indigo-500' },
+];
 
 interface EventConfig {
   id: string;
@@ -14,6 +47,11 @@ interface EventConfig {
   backgroundVideoUrl?: string | null;
   overlayOpacity: number;
   checkinPopupTimeoutMs?: number;
+  enablePhotoCapture: boolean;
+  enableLuckyDraw: boolean;
+  enableSouvenir: boolean;
+  allowDuplicateGuestId: boolean;
+  customCategories?: CustomCategory[];
 }
 
 export default function EventSettingsPage() {
@@ -26,6 +64,45 @@ export default function EventSettingsPage() {
   const [purging, setPurging] = useState(false);
   const [broadcastPreview, setBroadcastPreview] = useState(false);
   const previewTimer = useRef<any>(null);
+  
+  // Category management
+  const [newCatValue, setNewCatValue] = useState('');
+  const [newCatLabel, setNewCatLabel] = useState('');
+  const [newCatColor, setNewCatColor] = useState('text-gray-300');
+  
+  const getCategories = (): CustomCategory[] => {
+    return cfg?.customCategories && cfg.customCategories.length > 0 
+      ? cfg.customCategories 
+      : DEFAULT_CATEGORIES;
+  };
+  
+  const addCategory = () => {
+    if (!newCatValue.trim() || !newCatLabel.trim()) return;
+    const categories = getCategories();
+    const exists = categories.some(c => c.value.toUpperCase() === newCatValue.toUpperCase().trim());
+    if (exists) {
+      setError('Kategori dengan value tersebut sudah ada');
+      return;
+    }
+    const newCat: CustomCategory = {
+      value: newCatValue.toUpperCase().trim().replace(/\s+/g, '_'),
+      label: newCatLabel.trim(),
+      color: newCatColor,
+    };
+    setCfg({ ...cfg!, customCategories: [...categories, newCat] });
+    setNewCatValue('');
+    setNewCatLabel('');
+    setNewCatColor('text-gray-300');
+  };
+  
+  const removeCategory = (value: string) => {
+    const categories = getCategories();
+    if (categories.length <= 1) {
+      setError('Minimal harus ada 1 kategori');
+      return;
+    }
+    setCfg({ ...cfg!, customCategories: categories.filter(c => c.value !== value) });
+  };
 
   const tokenHeader = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -34,7 +111,24 @@ export default function EventSettingsPage() {
 
   useEffect(() => {
     fetch(`${apiBase()}/events/active`, { headers: tokenHeader() })
-      .then(async (r) => setCfg(await r.json()))
+      .then(async (r) => {
+        if (r.status === 404) {
+          setCfg({
+            id: '',
+            name: '',
+            backgroundType: 'NONE',
+            overlayOpacity: 0.5,
+            enablePhotoCapture: false,
+            enableLuckyDraw: false,
+            enableSouvenir: false,
+            allowDuplicateGuestId: false,
+            checkinPopupTimeoutMs: 5000
+          });
+          return;
+        }
+        if (!r.ok) throw new Error(await r.text());
+        setCfg(await r.json());
+      })
       .catch((e) => setError(e.message));
   }, []);
 
@@ -47,15 +141,23 @@ export default function EventSettingsPage() {
       // also clear broadcast preview on server
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       if (token) {
-        fetch(`${apiBase()}/events/preview/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(()=>{});
+        fetch(`${apiBase()}/events/preview/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => { });
       }
     };
   }, []);
 
   const schedulePreview = (payload: Partial<EventConfig>) => {
+    // Merge payload with current cfg to get complete preview data
+    const mergedPayload = cfg ? {
+      overlayOpacity: payload.overlayOpacity ?? cfg.overlayOpacity,
+      backgroundType: payload.backgroundType ?? cfg.backgroundType,
+      backgroundImageUrl: payload.backgroundImageUrl !== undefined ? payload.backgroundImageUrl : cfg.backgroundImageUrl,
+      backgroundVideoUrl: payload.backgroundVideoUrl !== undefined ? payload.backgroundVideoUrl : cfg.backgroundVideoUrl,
+    } : payload;
+
     // local UI preview
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('theme:preview', { detail: payload }));
+      window.dispatchEvent(new CustomEvent('theme:preview', { detail: mergedPayload }));
     }
     // broadcast via SSE to all clients when enabled
     if (!broadcastPreview) return;
@@ -66,8 +168,8 @@ export default function EventSettingsPage() {
       fetch(`${apiBase()}/events/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload as any),
-      }).catch(()=>{});
+        body: JSON.stringify(mergedPayload),
+      }).catch(() => { });
     }, 150);
   };
 
@@ -79,16 +181,19 @@ export default function EventSettingsPage() {
     try {
       const res = await fetch(`${apiBase()}/events/active`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...(tokenHeader()||{}) },
+        headers: { 'Content-Type': 'application/json', ...(tokenHeader() || {}) },
         body: JSON.stringify({
           name: cfg.name,
-          date: cfg.date || undefined,
-          location: cfg.location || undefined,
+          date: cfg.date || null,
+          location: cfg.location || null,
           backgroundType: cfg.backgroundType,
-          backgroundImageUrl: cfg.backgroundImageUrl || undefined,
-          backgroundVideoUrl: cfg.backgroundVideoUrl || undefined,
+          backgroundImageUrl: cfg.backgroundType === 'IMAGE' ? (cfg.backgroundImageUrl || null) : null,
+          backgroundVideoUrl: cfg.backgroundType === 'VIDEO' ? (cfg.backgroundVideoUrl || null) : null,
           overlayOpacity: cfg.overlayOpacity,
           checkinPopupTimeoutMs: cfg.checkinPopupTimeoutMs ?? 5000,
+          enablePhotoCapture: cfg.enablePhotoCapture ?? false,
+          allowDuplicateGuestId: cfg.allowDuplicateGuestId ?? false,
+          customCategories: cfg.customCategories || null,
         })
       });
       if (!res.ok) setError(await res.text());
@@ -100,7 +205,7 @@ export default function EventSettingsPage() {
         }
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
         if (token) {
-          fetch(`${apiBase()}/events/preview/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(()=>{});
+          fetch(`${apiBase()}/events/preview/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => { });
         }
       }
     } catch (e: any) {
@@ -142,7 +247,7 @@ export default function EventSettingsPage() {
     try {
       const res = await fetch(`${apiBase()}/events/purge`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(tokenHeader()||{}) },
+        headers: { 'Content-Type': 'application/json', ...(tokenHeader() || {}) },
         body: JSON.stringify({ resetBranding })
       });
       if (!res.ok) throw new Error(await res.text());
@@ -156,154 +261,399 @@ export default function EventSettingsPage() {
     }
   };
 
-  
+
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const bgInputRef = useRef<HTMLInputElement>(null);
 
   if (!cfg) return <RequireAuth><div className="p-6 text-sm text-brand-textMuted">Loading...</div></RequireAuth>;
 
   return (
     <RequireAuth>
       <div className="min-h-screen p-6 md:p-8">
-        <div className="mx-auto max-w-3xl space-y-4">
+        <div className="mx-auto max-w-3xl space-y-6">
           <h1 className="text-2xl md:text-3xl font-bold text-white text-shadow-lg">Event Settings</h1>
-          {error && <div className="text-sm text-brand-danger">{error}</div>}
-          {message && <div className="text-sm text-brand-accent">{message}</div>}
 
-          <div className="space-y-6 rounded-xl border border-brand-border bg-brand-surface p-5 shadow-soft">
-            <div className="grid gap-4">
+          {/* Quick Management Links */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Link
+              href="/admin/prizes"
+              className="flex items-center justify-between p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/20">
+                  <Trophy size={20} className="text-amber-400" />
+                </div>
+                <div>
+                  <div className="font-medium text-white">Prize Inventory</div>
+                  <div className="text-xs text-white/60">Kelola hadiah door prize</div>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-white/40 group-hover:text-white/70 transition-colors" />
+            </Link>
+
+            <Link
+              href="/admin/souvenirs"
+              className="flex items-center justify-between p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-purple-500/20">
+                  <Package size={20} className="text-purple-400" />
+                </div>
+                <div>
+                  <div className="font-medium text-white">Souvenir Inventory</div>
+                  <div className="text-xs text-white/60">Kelola stock souvenir</div>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-white/40 group-hover:text-white/70 transition-colors" />
+            </Link>
+
+            <Link
+              href="/admin/settings/users"
+              className="flex items-center justify-between p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/20">
+                  <UserCog size={20} className="text-blue-400" />
+                </div>
+                <div>
+                  <div className="font-medium text-white">User Management</div>
+                  <div className="text-xs text-white/60">Kelola admin users</div>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-white/40 group-hover:text-white/70 transition-colors" />
+            </Link>
+          </div>
+
+          {error && <div className="text-sm text-brand-danger bg-red-500/10 p-3 rounded-lg border border-red-500/20">{error}</div>}
+          {message && <div className="text-sm text-brand-accent bg-brand-primary/10 p-3 rounded-lg border border-brand-primary/20">{message}</div>}
+
+          <Card variant="glass" className="space-y-8 p-6 md:p-8">
+            <div className="grid gap-6">
               <div>
-                <label className="mb-1 block text-sm text-brand-textMuted">Event Name</label>
-                <input
-                  className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
+                <Label className="mb-2 flex items-center gap-2" htmlFor="event-name">
+                  <Type size={16} className="text-white/50" />
+                  Event Name
+                </Label>
+                <Input
+                  id="event-name"
                   value={cfg.name}
-                  onChange={(e)=>setCfg({...cfg, name: e.target.value})}
+                  onChange={(e) => setCfg({ ...cfg, name: e.target.value })}
+                  className="text-lg"
                 />
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm text-brand-textMuted">Date</label>
-                  <input
+                  <Label className="mb-2 flex items-center gap-2" htmlFor="event-date">
+                    <Calendar size={16} className="text-white/50" />
+                    Date
+                  </Label>
+                  <Input
+                    id="event-date"
                     type="date"
-                    className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
-                    value={cfg.date?.slice(0,10) || ''}
-                    onChange={(e)=>setCfg({...cfg, date: e.target.value})}
+                    value={cfg.date?.slice(0, 10) || ''}
+                    onChange={(e) => setCfg({ ...cfg, date: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm text-brand-textMuted">Location</label>
-                  <input
-                    className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
+                  <Label className="mb-2 flex items-center gap-2" htmlFor="event-location">
+                    <MapPin size={16} className="text-white/50" />
+                    Location
+                  </Label>
+                  <Input
+                    id="event-location"
                     value={cfg.location || ''}
-                    onChange={(e)=>setCfg({...cfg, location: e.target.value})}
+                    onChange={(e) => setCfg({ ...cfg, location: e.target.value })}
                   />
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3 rounded-lg bg-brand-surfaceMuted/60 p-4">
+            <div className="space-y-4 rounded-xl bg-white/5 p-6 border border-white/10">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Settings2 size={20} />
+                Display Configuration
+              </h3>
+
               <div>
-                <label className="mb-1 block text-sm text-brand-textMuted">Overlay Opacity ({cfg.overlayOpacity})</label>
+                <label className="mb-2 block text-sm text-brand-textMuted flex justify-between">
+                  <span>Overlay Opacity</span>
+                  <span className="font-mono">{Math.round(cfg.overlayOpacity * 100)}%</span>
+                </label>
                 <input
                   type="range"
                   min={0}
                   max={1}
                   step={0.05}
+                  className="w-full accent-brand-primary h-2 bg-white/20 rounded-lg appearance-none cursor-pointer"
                   value={cfg.overlayOpacity}
-                  onChange={(e)=>{ const v = Number(e.target.value); setCfg({...cfg, overlayOpacity: v}); schedulePreview({ overlayOpacity: v }); }}
+                  onChange={(e) => { const v = Number(e.target.value); setCfg({ ...cfg, overlayOpacity: v }); schedulePreview({ overlayOpacity: v }); }}
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm text-brand-textMuted">Check-in Popup Timeout (detik)</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={1}
-                    max={60}
-                    step={1}
-                    value={Math.round(((cfg.checkinPopupTimeoutMs ?? 5000) / 1000))}
-                    onChange={(e)=>{
-                      const seconds = Number(e.target.value) || 5;
-                      setCfg({ ...cfg, checkinPopupTimeoutMs: seconds * 1000 });
-                    }}
-                  />
-                  <div className="w-10 text-sm text-brand-textMuted">{Math.round(((cfg.checkinPopupTimeoutMs ?? 5000) / 1000))}s</div>
+                <label className="mb-2 block text-sm text-brand-textMuted flex justify-between">
+                  <span>Check-in Popup Timeout</span>
+                  <span className="font-mono">{Math.round(((cfg.checkinPopupTimeoutMs ?? 5000) / 1000))}s</span>
+                </label>
+                <input
+                  type="range"
+                  min={1}
+                  max={60}
+                  step={1}
+                  className="w-full accent-brand-primary h-2 bg-white/20 rounded-lg appearance-none cursor-pointer"
+                  value={Math.round(((cfg.checkinPopupTimeoutMs ?? 5000) / 1000))}
+                  onChange={(e) => {
+                    const seconds = Number(e.target.value) || 5;
+                    setCfg({ ...cfg, checkinPopupTimeoutMs: seconds * 1000 });
+                  }}
+                />
+              </div>
+
+              <div className="pt-4 border-t border-white/10 space-y-3">
+                <label className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Camera size={20} className="text-emerald-400" />
+                    <div>
+                      <div className="font-medium text-white">Photo Capture saat Check-in</div>
+                      <div className="text-sm text-white/60">Aktifkan opsi mengambil foto tamu via webcam setelah check-in</div>
+                    </div>
+                  </div>
+                  <div className={`w-12 h-7 rounded-full transition-colors relative ${cfg.enablePhotoCapture ? 'bg-emerald-500' : 'bg-white/20'}`}>
+                    <div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${cfg.enablePhotoCapture ? 'translate-x-5' : 'translate-x-0'}`} />
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={cfg.enablePhotoCapture}
+                      onChange={(e) => setCfg({ ...cfg, enablePhotoCapture: e.target.checked })}
+                    />
+                  </div>
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Users size={20} className="text-amber-400" />
+                    <div>
+                      <div className="font-medium text-white">Izinkan Duplikat Guest ID</div>
+                      <div className="text-sm text-white/60">Tamu dengan ID sama bisa didaftarkan lebih dari satu (misal: beda perusahaan)</div>
+                    </div>
+                  </div>
+                  <div className={`w-12 h-7 rounded-full transition-colors relative ${cfg.allowDuplicateGuestId ? 'bg-amber-500' : 'bg-white/20'}`}>
+                    <div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${cfg.allowDuplicateGuestId ? 'translate-x-5' : 'translate-x-0'}`} />
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={cfg.allowDuplicateGuestId}
+                      onChange={(e) => setCfg({ ...cfg, allowDuplicateGuestId: e.target.checked })}
+                    />
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Category Management */}
+            <div className="space-y-4 rounded-xl bg-white/5 p-6 border border-white/10">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Tag size={20} />
+                Kategori Tamu
+              </h3>
+              
+              <div className="text-sm text-white/60 mb-4">
+                Kelola kategori tamu seperti VIP, VVIP, Media, dll.
+              </div>
+
+              {/* Current Categories */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {getCategories().map((cat) => {
+                  const colorOpt = COLOR_OPTIONS.find(c => c.value === cat.color);
+                  return (
+                    <div 
+                      key={cat.value}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/20 bg-white/5`}
+                    >
+                      <span className={`w-3 h-3 rounded-full ${colorOpt?.bg || 'bg-gray-500'}`} />
+                      <span className="text-sm text-white">{cat.label}</span>
+                      <span className="text-xs text-white/40 font-mono">({cat.value})</span>
+                      <button
+                        type="button"
+                        onClick={() => removeCategory(cat.value)}
+                        className="ml-1 p-0.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors"
+                        title="Hapus kategori"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add New Category */}
+              <div className="pt-4 border-t border-white/10">
+                <div className="text-sm text-white/70 mb-3">Tambah Kategori Baru</div>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="block text-xs text-white/50 mb-1">Value (ID)</label>
+                    <Input
+                      value={newCatValue}
+                      onChange={(e) => setNewCatValue(e.target.value.toUpperCase())}
+                      placeholder="VVIP"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="block text-xs text-white/50 mb-1">Label</label>
+                    <Input
+                      value={newCatLabel}
+                      onChange={(e) => setNewCatLabel(e.target.value)}
+                      placeholder="VVIP Guest"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="min-w-[100px]">
+                    <label className="block text-xs text-white/50 mb-1">Warna</label>
+                    <select
+                      value={newCatColor}
+                      onChange={(e) => setNewCatColor(e.target.value)}
+                      className="w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      {COLOR_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value} className="bg-slate-800">
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={addCategory}
+                    disabled={!newCatValue.trim() || !newCatLabel.trim()}
+                    className="flex items-center gap-1"
+                  >
+                    <Plus size={16} />
+                    Tambah
+                  </Button>
+                </div>
+              </div>
+
+              {/* Reset to Default */}
+              <div className="pt-4 border-t border-white/10">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setCfg({ ...cfg!, customCategories: [...DEFAULT_CATEGORIES] })}
+                  className="text-white/60 hover:text-white"
+                >
+                  Reset ke Default
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-brand-text flex items-center gap-2">
+                  <ImageIcon size={16} />
+                  Logo
+                </div>
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center justify-center min-h-[160px] gap-4">
+                  {cfg.logoUrl ? (
+                    <img src={toApiUrl(cfg.logoUrl)} className="h-20 object-contain" alt="logo" />
+                  ) : (
+                    <div className="text-white/30 text-sm">No Logo</div>
+                  )}
+                  <div>
+                    <input
+                      ref={logoInputRef}
+                      disabled={uploadingLogo}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) upload('logo', f); }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={uploadingLogo}
+                      onClick={() => logoInputRef.current?.click()}
+                      className="flex items-center gap-2"
+                    >
+                      {uploadingLogo ? <Loader2 className="animate-spin" size={16} /> : <Upload size={16} />}
+                      <span>{uploadingLogo ? 'Uploading...' : 'Upload Logo'}</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-brand-text flex items-center gap-2">
+                  <Monitor size={16} />
+                  Background
+                </div>
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {(['NONE', 'IMAGE', 'VIDEO'] as const).map((t) => (
+                      <label key={t} className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg cursor-pointer transition-colors border ${cfg.backgroundType === t ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white/5 text-white/60 border-transparent hover:bg-white/10'}`}>
+                        <input
+                          type="radio"
+                          name="bgtype"
+                          className="hidden"
+                          checked={cfg.backgroundType === t}
+                          onChange={() => { setCfg({ ...cfg, backgroundType: t }); schedulePreview({ backgroundType: t }); }}
+                        />
+                        <span className="text-xs font-medium">{t}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="relative min-h-[160px] rounded-lg overflow-hidden bg-black/20 flex items-center justify-center border border-white/10">
+                    {cfg.backgroundType === 'IMAGE' && cfg.backgroundImageUrl && (
+                      <img src={toApiUrl(cfg.backgroundImageUrl)} className="w-full h-full object-cover absolute inset-0" />
+                    )}
+                    {cfg.backgroundType === 'VIDEO' && cfg.backgroundVideoUrl && (
+                      // eslint-disable-next-line jsx-a11y/media-has-caption
+                      <video src={toApiUrl(cfg.backgroundVideoUrl)} className="w-full h-full object-cover absolute inset-0" controls loop muted />
+                    )}
+                    {(!cfg.backgroundType || cfg.backgroundType === 'NONE' || (cfg.backgroundType === 'IMAGE' && !cfg.backgroundImageUrl) || (cfg.backgroundType === 'VIDEO' && !cfg.backgroundVideoUrl)) && (
+                      <div className="text-white/30 text-sm">No Background</div>
+                    )}
+                  </div>
+
+                  <div>
+                    <input
+                      ref={bgInputRef}
+                      disabled={uploadingBg}
+                      type="file"
+                      accept="image/*,video/*"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) upload('background', f); }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={uploadingBg}
+                      onClick={() => bgInputRef.current?.click()}
+                      className="w-full flex items-center justify-center gap-2"
+                    >
+                      {uploadingBg ? <Loader2 className="animate-spin" size={16} /> : <Upload size={16} />}
+                      <span>{uploadingBg ? 'Uploading...' : 'Change Background'}</span>
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div>
-                <div className="mb-2 text-sm font-medium text-brand-text">Logo</div>
-                {cfg.logoUrl && <img src={toApiUrl(cfg.logoUrl)} className="mb-2 h-16" alt="logo" />}
-                <input
-                  disabled={uploadingLogo}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e)=>{ const f=e.target.files?.[0]; if(f) upload('logo', f); }}
-                />
-                {uploadingLogo && <div className="text-sm text-brand-textMuted">Mengunggah logo...</div>}
-              </div>
-              <div>
-                <div className="mb-2 text-sm font-medium text-brand-text">Background</div>
-                <div className="mb-2 flex flex-wrap gap-3 text-sm">
-                  {(['NONE','IMAGE','VIDEO'] as const).map((t)=> (
-                    <label key={t} className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="bgtype"
-                        checked={cfg.backgroundType===t}
-                        onChange={()=>{ setCfg({...cfg, backgroundType: t}); schedulePreview({ backgroundType: t }); }}
-                      />
-                      <span className="text-brand-textMuted">{t}</span>
-                    </label>
-                  ))}
-                </div>
-                {cfg.backgroundType==='IMAGE' && cfg.backgroundImageUrl && (
-                  <img src={toApiUrl(cfg.backgroundImageUrl)} className="mb-2 h-24 w-full rounded object-cover" />
-                )}
-                {cfg.backgroundType==='VIDEO' && cfg.backgroundVideoUrl && (
-                  // eslint-disable-next-line jsx-a11y/media-has-caption
-                  <video src={toApiUrl(cfg.backgroundVideoUrl)} className="mb-2 h-32 w-full rounded object-cover" controls loop muted />
-                )}
-                <input
-                  disabled={uploadingBg}
-                  type="file"
-                  accept="image/*,video/*"
-                  onChange={(e)=>{ const f=e.target.files?.[0]; if(f) upload('background', f); }}
-                />
-                {uploadingBg && <div className="text-sm text-brand-textMuted">Mengunggah background...</div>}
-              </div>
-            </div>
-
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  onClick={save}
-                  disabled={saving}
-                  className="inline-flex items-center justify-center rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white shadow-soft hover:bg-blue-600 disabled:opacity-50"
-                >
-                  {saving ? 'Menyimpan...' : 'Save'}
-                </button>
-                <button
-                  onClick={()=>purge(false)}
-                  disabled={purging}
-                  className="inline-flex items-center justify-center rounded-lg border border-brand-border bg-brand-surface px-4 py-2 text-sm font-medium text-brand-text hover:bg-brand-surfaceMuted disabled:opacity-50"
-                >
-                  {purging ? 'Memproses...' : 'Purge Guests'}
-                </button>
-                <button
-                  onClick={()=>purge(true)}
-                  disabled={purging}
-                  className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-                >
-                  {purging ? 'Memproses...' : 'Purge + Reset Branding'}
-                </button>
-                
-                <label className="ml-auto flex items-center gap-2 text-xs md:text-sm text-brand-textMuted">
+            <div className="pt-6 border-t border-white/10 flex flex-col gap-6">
+              <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-lg bg-white/5 border border-white/10">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className={`w-10 h-6 rounded-full transition-colors relative ${broadcastPreview ? 'bg-brand-primary' : 'bg-white/20'}`}>
+                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${broadcastPreview ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
                   <input
                     type="checkbox"
+                    className="hidden"
                     checked={broadcastPreview}
-                    onChange={(e)=>{
+                    onChange={(e) => {
                       const on = e.target.checked; setBroadcastPreview(on);
                       if (on && cfg) {
                         schedulePreview({
@@ -314,25 +664,69 @@ export default function EventSettingsPage() {
                         });
                       } else {
                         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-                        if (token) fetch(`${apiBase()}/events/preview/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(()=>{});
+                        if (token) fetch(`${apiBase()}/events/preview/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => { });
                         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('theme:preview', { detail: null }));
                       }
                     }}
                   />
-                  Live Preview (broadcast)
+                  <span className="text-sm font-medium text-white/80 group-hover:text-white transition-colors">Live Preview (Broadcast)</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={()=>{ const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null; if (token) fetch(`${apiBase()}/events/preview/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(()=>{}); if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('theme:preview', { detail: null })); }}
-                  className="inline-flex items-center justify-center rounded-lg border border-brand-border bg-brand-surface px-3 py-2 text-xs md:text-sm font-medium text-brand-text hover:bg-brand-surfaceMuted"
+
+                {broadcastPreview && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => { const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null; if (token) fetch(`${apiBase()}/events/preview/clear`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => { }); if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('theme:preview', { detail: null })); }}
+                    className="flex items-center gap-2"
+                  >
+                    <EyeOff size={16} />
+                    Stop Preview
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => purge(false)}
+                    disabled={purging}
+                    size="sm"
+                    variant="secondary"
+                    className="flex items-center gap-2"
+                  >
+                    <Trash2 size={16} />
+                    {purging ? 'Processing...' : 'Purge Guests'}
+                  </Button>
+                  <Button
+                    onClick={() => purge(true)}
+                    disabled={purging}
+                    size="sm"
+                    variant="danger"
+                    className="flex items-center gap-2"
+                  >
+                    <AlertTriangle size={16} />
+                    {purging ? 'Processing...' : 'Reset All'}
+                  </Button>
+                </div>
+
+                <Button
+                  onClick={save}
+                  disabled={saving}
+                  size="md"
+                  className="flex items-center gap-2 min-w-[140px] justify-center"
                 >
-                  Stop Preview
-                </button>
+                  {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </Button>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       </div>
     </RequireAuth>
   );
 }
+
+import { Type, Calendar, MapPin, Settings2, Image as ImageIcon, Monitor, Upload, Loader2, EyeOff, Save, Trash2, AlertTriangle, Gift, Dices, Package, UserCog, Trophy, ChevronRight, Camera, Users, Tag, X, Plus } from 'lucide-react';
+import Link from 'next/link';

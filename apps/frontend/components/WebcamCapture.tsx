@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { Camera, Loader2 } from "lucide-react";
 
 type Props = {
   open: boolean;
@@ -12,26 +13,87 @@ export default function WebcamCapture({ open, onClose, onCapture, aspect = "squa
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setIsLoading(true);
+      setIsReady(false);
+      setError(null);
+      return;
+    }
     let active = true;
-    (async () => {
+    
+    const startCamera = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+        // Check if getUserMedia is available
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error("Browser tidak mendukung akses kamera. Gunakan HTTPS atau localhost.");
+        }
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: "user",
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }, 
+          audio: false 
+        });
+        
         if (!active) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
+        
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+          
+          // Wait for video to be ready
+          videoRef.current.onloadedmetadata = () => {
+            if (!active) return;
+            videoRef.current?.play()
+              .then(() => {
+                if (active) {
+                  setIsLoading(false);
+                  setIsReady(true);
+                }
+              })
+              .catch((playError) => {
+                console.error("Video play error:", playError);
+                if (active) {
+                  setError("Gagal memutar video kamera");
+                  setIsLoading(false);
+                }
+              });
+          };
         }
       } catch (e: any) {
-        setError(e?.message || "Cannot access camera");
+        console.error("Camera access error:", e);
+        let errorMsg = "Tidak dapat mengakses kamera";
+        if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+          errorMsg = "Akses kamera ditolak. Berikan izin kamera di browser.";
+        } else if (e.name === "NotFoundError" || e.name === "DevicesNotFoundError") {
+          errorMsg = "Kamera tidak ditemukan.";
+        } else if (e.name === "NotReadableError" || e.name === "TrackStartError") {
+          errorMsg = "Kamera sedang digunakan oleh aplikasi lain.";
+        } else if (e.name === "OverconstrainedError") {
+          errorMsg = "Kamera tidak mendukung resolusi yang diminta.";
+        } else if (e.message) {
+          errorMsg = e.message;
+        }
+        if (active) {
+          setError(errorMsg);
+          setIsLoading(false);
+        }
       }
-    })();
+    };
+    
+    startCamera();
+    
     return () => {
       active = false;
       if (streamRef.current) {
@@ -42,7 +104,7 @@ export default function WebcamCapture({ open, onClose, onCapture, aspect = "squa
   }, [open]);
 
   const capture = async () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !isReady) return;
     const video = videoRef.current;
     const width = video.videoWidth || 640;
     const height = video.videoHeight || 480;
@@ -85,17 +147,59 @@ export default function WebcamCapture({ open, onClose, onCapture, aspect = "squa
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-white rounded shadow-lg p-4 w-full max-w-lg">
-        <div className="text-lg font-semibold mb-2">Ambil Foto via Webcam</div>
-        {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
-        <div className="relative w-full aspect-video bg-black overflow-hidden rounded">
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-slate-900 border border-white/20 rounded-xl shadow-2xl p-6 w-full max-w-lg">
+        <div className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <Camera size={24} className="text-emerald-400" />
+          Ambil Foto via Webcam
         </div>
-        <div className="mt-3 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="border rounded px-4 py-2">Batal</button>
-          <button onClick={capture} className="bg-black text-white rounded px-4 py-2">Ambil</button>
+        
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/30 text-red-300 text-sm p-3 rounded-lg mb-4">
+            <p className="font-medium mb-1">Error:</p>
+            <p>{error}</p>
+            {error.includes("HTTPS") && (
+              <div className="mt-2 text-xs text-white/60">
+                <p>Kamera membutuhkan koneksi HTTPS atau localhost.</p>
+                <p className="mt-1">Untuk HTTP di jaringan lokal, aktifkan "Insecure origins treated as secure" di chrome://flags</p>
+              </div>
+            )}
+          </div>
+        )}
+        
+        <div className="relative w-full aspect-video bg-black overflow-hidden rounded-lg border border-white/10">
+          {isLoading && !error && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black">
+              <div className="text-center text-white">
+                <Loader2 className="animate-spin mx-auto mb-2" size={32} />
+                <p className="text-sm text-white/60">Memuat kamera...</p>
+              </div>
+            </div>
+          )}
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video 
+            ref={videoRef} 
+            className={`absolute inset-0 w-full h-full object-cover ${isLoading ? 'opacity-0' : 'opacity-100'}`} 
+            playsInline 
+            muted 
+          />
+        </div>
+        
+        <div className="mt-4 flex items-center justify-end gap-3">
+          <button 
+            onClick={onClose} 
+            className="px-5 py-2.5 border border-white/30 text-white rounded-lg hover:bg-white/10 transition-colors"
+          >
+            Batal
+          </button>
+          <button 
+            onClick={capture} 
+            disabled={!isReady || !!error}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            <Camera size={18} />
+            Ambil Foto
+          </button>
         </div>
       </div>
     </div>
