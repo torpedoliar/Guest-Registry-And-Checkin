@@ -65,7 +65,7 @@ export class ReportsService {
       margin: 50,
       info: {
         Title: `Guest Report - ${event.name}`,
-        Author: 'Guest Registry System',
+        Author: 'Event Management System',
         CreationDate: new Date(),
       }
     });

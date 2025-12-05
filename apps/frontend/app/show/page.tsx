@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { apiBase, toApiUrl } from '../../lib/api';
+import { apiBase, toApiUrl, parseErrorMessage } from '../../lib/api';
 import { CheckCircle, Users, X, MapPin, Building2, Layers, Hash, Clock, Sparkles, Radio } from 'lucide-react';
 
 type EventConfig = {
@@ -104,7 +104,8 @@ export default function ShowPage() {
     if (!guestId && !name) return;
     const res = await fetch(`${apiBase()}/public/guests/search?${params.toString()}`);
     if (!res.ok) {
-      setError(await res.text());
+      const errorText = await res.text();
+      setError(parseErrorMessage(errorText));
       return;
     }
     const data = await res.json();

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useRef } from "react";
-import { apiBase, toApiUrl } from "../../lib/api";
+import { apiBase, toApiUrl, parseErrorMessage } from "../../lib/api";
 import { Html5Qrcode } from "html5-qrcode";
 import { Search, QrCode, Loader2, CheckCircle, Clock, Users, X, XCircle, UserPlus, Settings, Camera } from 'lucide-react';
 
@@ -19,6 +19,13 @@ type EventConfig = {
   enablePhotoCapture?: boolean;
 };
 
+type GuestCheckin = {
+  id: string;
+  checkinAt: string;
+  checkinByName?: string;
+  counterName?: string;
+};
+
 type Guest = {
   id: string;
   queueNumber: number;
@@ -32,6 +39,12 @@ type Guest = {
   notes?: string | null;
   checkedIn: boolean;
   checkedInAt?: string | null;
+  checkedInByName?: string | null;
+  checkinCount?: number;
+  checkins?: GuestCheckin[];
+  alreadyCheckedByThisAdmin?: boolean;
+  maxReached?: boolean;
+  message?: string;
 };
 
 function cleanQrContent(text: string): string {
@@ -71,6 +84,10 @@ export default function CheckinPage() {
   const [unchecking, setUnchecking] = useState(false);
   const [isDuplicateCheckIn, setIsDuplicateCheckIn] = useState(false);
   const [isAuth, setIsAuth] = useState(false);
+  const [showUncheckModal, setShowUncheckModal] = useState(false);
+  const [uncheckPassword, setUncheckPassword] = useState('');
+  const [uncheckReason, setUncheckReason] = useState('');
+  const [uncheckTarget, setUncheckTarget] = useState<Guest | null>(null);
   const [autoCreateGuest, setAutoCreateGuest] = useState(false);
   const [enablePhotoCapture, setEnablePhotoCapture] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -190,7 +207,10 @@ export default function CheckinPage() {
     setSearching(true);
     try {
       const res = await fetch(`${apiBase()}/public/guests/search?${params.toString()}`);
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       const data = await res.json();
       setResults(data);
       setQ(""); // Auto clear input after search
@@ -252,7 +272,10 @@ export default function CheckinPage() {
         return;
       }
 
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       const updated = await res.json();
       setCheckedGuest(updated);
       setSelected(updated);
@@ -272,19 +295,55 @@ export default function CheckinPage() {
     }
   };
 
-  const doUncheckin = async (g: Guest) => {
-    setError(null);
+  const openUncheckModal = (g: Guest) => {
+    setUncheckTarget(g);
+    setUncheckPassword('');
+    setUncheckReason('');
+    setShowUncheckModal(true);
     clearPopupTimeout();
-    // For security, uncheckin tetap admin endpoint; tampilkan pesan jika gagal (tanpa login)
+  };
+
+  const closeUncheckModal = () => {
+    setShowUncheckModal(false);
+    setUncheckTarget(null);
+    setUncheckPassword('');
+    setUncheckReason('');
+  };
+
+  const doUncheckin = async () => {
+    if (!uncheckTarget) return;
+    
+    setError(null);
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) {
+      setError('Login diperlukan untuk membatalkan check-in');
+      return;
+    }
+
     setUnchecking(true);
     try {
-      const res = await fetch(`${apiBase()}/guests/${g.id}/uncheckin`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
-      if (!res.ok) throw new Error('Gagal membatalkan check-in (butuh login admin)');
+      const res = await fetch(`${apiBase()}/guests/${uncheckTarget.id}/uncheckin`, { 
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({
+          password: uncheckPassword,
+          reason: uncheckReason,
+        }),
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Gagal membatalkan check-in');
+      }
+      
       const updated = await res.json();
       setCheckedGuest(null);
       setSelected(updated);
       refreshHistory();
+      closeUncheckModal();
     } catch (e: any) {
       setError(e.message || 'Gagal membatalkan check-in');
     } finally {
@@ -632,7 +691,10 @@ export default function CheckinPage() {
         return;
       }
 
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       const updated = await res.json();
       setCheckedGuest(updated);
       setSelected(updated);
@@ -996,20 +1058,51 @@ export default function CheckinPage() {
                 </div>
               )}
 
-              {isDuplicateCheckIn && checkedGuest.checkedInAt && (
+              {isDuplicateCheckIn && (
                 <div className="mb-4 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                  <div className="text-sm text-amber-200/80 uppercase tracking-wider font-medium">Waktu Check-in Sebelumnya</div>
-                  <div className="text-xl font-mono font-bold text-amber-100">
-                    {new Date(checkedGuest.checkedInAt).toLocaleString('id-ID', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit'
-                    })}
-                  </div>
+                  {checkedGuest.message && (
+                    <div className="text-base text-amber-300 font-medium mb-2">{checkedGuest.message}</div>
+                  )}
+                  {checkedGuest.checkins && checkedGuest.checkins.length > 0 ? (
+                    <>
+                      <div className="text-sm text-amber-200/80 uppercase tracking-wider font-medium mb-2">
+                        Riwayat Check-in ({checkedGuest.checkinCount || checkedGuest.checkins.length}x)
+                      </div>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {checkedGuest.checkins.map((c, idx) => (
+                          <div key={c.id || idx} className="flex items-center justify-between text-sm bg-amber-500/10 rounded px-2 py-1">
+                            <span className="text-amber-100 font-medium">{c.checkinByName || 'Admin'}</span>
+                            <span className="text-amber-200/70 font-mono text-xs">
+                              {new Date(c.checkinAt).toLocaleString('id-ID', {
+                                day: '2-digit',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : checkedGuest.checkedInAt && (
+                    <>
+                      <div className="text-sm text-amber-200/80 uppercase tracking-wider font-medium">Waktu Check-in Sebelumnya</div>
+                      <div className="text-xl font-mono font-bold text-amber-100">
+                        {new Date(checkedGuest.checkedInAt).toLocaleString('id-ID', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })}
+                      </div>
+                      {checkedGuest.checkedInByName && (
+                        <div className="text-sm text-amber-200/70 mt-1">Oleh: {checkedGuest.checkedInByName}</div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1091,10 +1184,10 @@ export default function CheckinPage() {
                   <button
                     disabled={unchecking}
                     className="flex items-center gap-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg px-6 py-3 text-base font-medium disabled:opacity-50 transition-colors ml-auto"
-                    onClick={() => doUncheckin(checkedGuest)}
+                    onClick={() => openUncheckModal(checkedGuest)}
                   >
-                    {unchecking ? <Loader2 className="animate-spin" size={20} /> : <XCircle size={20} />}
-                    {unchecking ? 'Membatalkan...' : 'Batal Check-in'}
+                    <XCircle size={20} />
+                    Batal Check-in
                   </button>
                 )}
               </div>
@@ -1146,6 +1239,91 @@ export default function CheckinPage() {
               <X size={20} />
               Batal
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Uncheck Confirmation Modal */}
+      {showUncheckModal && uncheckTarget && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-xl bg-slate-900 border border-red-500/30 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                <XCircle size={24} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Batalkan Check-in</h3>
+                <p className="text-sm text-white/60">Tindakan ini memerlukan verifikasi</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mb-4">
+              <p className="text-sm text-amber-200">
+                <strong>Peringatan:</strong> Membatalkan check-in akan membuat tamu <strong>{uncheckTarget.name}</strong> tidak eligible untuk lucky draw sampai check-in ulang.
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Password Admin <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={uncheckPassword}
+                  onChange={(e) => setUncheckPassword(e.target.value)}
+                  placeholder="Masukkan password Anda"
+                  className="w-full rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Alasan Pembatalan <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={uncheckReason}
+                  onChange={(e) => setUncheckReason(e.target.value)}
+                  placeholder="Jelaskan alasan pembatalan check-in (min. 5 karakter)"
+                  rows={3}
+                  className="w-full rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50 resize-none"
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={closeUncheckModal}
+                disabled={unchecking}
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-white font-medium hover:bg-white/10 transition-colors disabled:opacity-50"
+              >
+                <X size={18} />
+                Batal
+              </button>
+              <button
+                onClick={doUncheckin}
+                disabled={unchecking || !uncheckPassword || uncheckReason.length < 5}
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 px-4 py-3 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {unchecking ? (
+                  <>
+                    <Loader2 className="animate-spin" size={18} />
+                    Memproses...
+                  </>
+                ) : (
+                  <>
+                    <XCircle size={18} />
+                    Konfirmasi Pembatalan
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

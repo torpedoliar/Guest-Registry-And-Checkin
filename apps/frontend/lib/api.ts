@@ -45,3 +45,46 @@ export function toApiUrl(path?: string | null): string {
   return p;
 }
 
+// Helper function to parse API error messages into user-friendly messages
+export function parseErrorMessage(errorText: string): string {
+  const errorMap: Record<string, string> = {
+    'Event not found': 'Event tidak ditemukan. Silakan pilih event yang aktif terlebih dahulu.',
+    'No active event': 'Tidak ada event aktif. Silakan aktifkan event terlebih dahulu.',
+    'Invalid credentials': 'Login gagal. Username atau password salah.',
+    'Unauthorized': 'Sesi telah berakhir. Silakan login kembali.',
+    'Invalid date format': 'Format tanggal tidak valid.',
+    'Cannot delete active event': 'Tidak dapat menghapus event yang sedang aktif.',
+    'Guest not found': 'Data tamu tidak ditemukan.',
+    'Email settings not configured': 'Pengaturan email belum dikonfigurasi. Silakan atur SMTP terlebih dahulu.',
+    'Guest does not have an email': 'Tamu ini tidak memiliki alamat email.',
+    'Failed to send email': 'Gagal mengirim email. Periksa pengaturan SMTP.',
+    'No logo file provided': 'File logo tidak ditemukan.',
+    'No background file provided': 'File background tidak ditemukan.',
+    'Password salah': 'Password yang Anda masukkan salah. Silakan coba lagi.',
+    'Password diperlukan': 'Password wajib diisi untuk melakukan aksi ini.',
+    'Alasan pembatalan harus diisi': 'Alasan pembatalan wajib diisi (minimal 5 karakter).',
+  };
+
+  try {
+    const parsed = JSON.parse(errorText);
+    const message = parsed.message || parsed.error || '';
+    
+    // Check if we have a friendly message for this error
+    for (const [key, friendlyMessage] of Object.entries(errorMap)) {
+      if (message.includes(key)) {
+        return friendlyMessage;
+      }
+    }
+    
+    return message || 'Terjadi kesalahan. Silakan coba lagi.';
+  } catch {
+    // Not JSON, check raw text
+    for (const [key, friendlyMessage] of Object.entries(errorMap)) {
+      if (errorText.includes(key)) {
+        return friendlyMessage;
+      }
+    }
+    return errorText || 'Terjadi kesalahan. Silakan coba lagi.';
+  }
+}
+

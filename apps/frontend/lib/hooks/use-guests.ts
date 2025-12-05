@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiBase } from "../api";
+import { apiFetch, apiBase, parseErrorMessage } from "../api";
 
 type Stats = { total: number; checkedIn: number; notCheckedIn: number };
 type Event = { 
@@ -125,7 +125,10 @@ export function useCheckIn() {
         throw { type: "duplicate", guest: existing };
       }
 
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -138,8 +141,11 @@ export function useUncheckIn() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (guestId: string) => {
-      return apiFetch(`/guests/${guestId}/uncheckin`, { method: "POST" });
+    mutationFn: async ({ guestId, password, reason }: { guestId: string; password: string; reason: string }) => {
+      return apiFetch(`/guests/${guestId}/uncheckin`, { 
+        method: "POST",
+        body: JSON.stringify({ password, reason }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests"] });

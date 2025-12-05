@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useRef } from "react";
-import { apiBase, toApiUrl, apiFetch } from "../../lib/api";
+import { apiBase, toApiUrl, apiFetch, parseErrorMessage } from "../../lib/api";
 import { Html5Qrcode } from "html5-qrcode";
 import { Search, QrCode, Loader2, CheckCircle, Clock, Users, X, Gift, XCircle, Trophy, Package, ChevronDown, ChevronUp, UserPlus, Settings, Radio } from 'lucide-react';
 import { useSSE } from "../../lib/sse-context";
@@ -261,7 +261,10 @@ export default function SouvenirPage() {
         try {
             // Use public search to find guest first
             const res = await fetch(`${apiBase()}/public/guests/search?${params.toString()}`);
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(parseErrorMessage(errorText));
+            }
             const data = await res.json();
             setResults(data);
 

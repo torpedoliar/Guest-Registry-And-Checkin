@@ -1,7 +1,7 @@
 "use client";
 import RequireAuth from '../../../components/RequireAuth';
 import { useEffect, useState, DragEvent } from 'react';
-import { apiBase } from '../../../lib/api';
+import { apiBase, parseErrorMessage } from '../../../lib/api';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
 import Label from '../../../components/ui/Label';
@@ -107,7 +107,10 @@ export default function EventsPage() {
           location: newLocation.trim() || undefined,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       setMessage('Event berhasil dibuat');
       setNewName('');
       setNewDate('');
@@ -135,7 +138,10 @@ export default function EventsPage() {
           location: editLocation.trim() || undefined,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       setMessage('Event berhasil diupdate');
       setEditingId(null);
       await fetchEvents();
@@ -154,7 +160,10 @@ export default function EventsPage() {
         method: 'POST',
         headers: tokenHeader(),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       setMessage('Event diaktifkan');
       await fetchEvents();
     } catch (e: any) {
@@ -176,7 +185,10 @@ export default function EventsPage() {
         headers: { ...tokenHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       setMessage('Event berhasil di-clone');
       await fetchEvents();
     } catch (e: any) {
@@ -196,7 +208,10 @@ export default function EventsPage() {
         method: 'DELETE',
         headers: tokenHeader(),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       setMessage('Event berhasil dihapus');
       await fetchEvents();
     } catch (e: any) {

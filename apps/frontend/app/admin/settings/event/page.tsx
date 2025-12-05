@@ -1,7 +1,7 @@
 "use client";
 import RequireAuth from '../../../../components/RequireAuth';
 import { useEffect, useRef, useState } from 'react';
-import { apiBase, toApiUrl } from '../../../../lib/api';
+import { apiBase, toApiUrl, parseErrorMessage } from '../../../../lib/api';
 import Card from '../../../../components/ui/Card';
 import Input from '../../../../components/ui/Input';
 import Label from '../../../../components/ui/Label';
@@ -126,7 +126,10 @@ export default function EventSettingsPage() {
           });
           return;
         }
-        if (!r.ok) throw new Error(await r.text());
+        if (!r.ok) {
+          const errorText = await r.text();
+          throw new Error(parseErrorMessage(errorText));
+        }
         setCfg(await r.json());
       })
       .catch((e) => setError(e.message));
@@ -196,8 +199,10 @@ export default function EventSettingsPage() {
           customCategories: cfg.customCategories || null,
         })
       });
-      if (!res.ok) setError(await res.text());
-      else {
+      if (!res.ok) {
+        const errorText = await res.text();
+        setError(parseErrorMessage(errorText));
+      } else {
         setMessage('Tersimpan.');
         // Clear preview override after successful save
         if (typeof window !== 'undefined') {
@@ -225,12 +230,15 @@ export default function EventSettingsPage() {
         headers: tokenHeader(),
         body: fd,
       });
-      if (!res.ok) return setError(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        return setError(parseErrorMessage(errorText));
+      }
       const updated = await res.json();
       setCfg(updated);
       setMessage(`${kind === 'logo' ? 'Logo' : 'Background'} terunggah.`);
     } catch (e: any) {
-      setError(e.message || 'Gagal upload');
+      setError(parseErrorMessage(e.message) || 'Gagal upload');
     } finally {
       if (kind === 'logo') setUploadingLogo(false); else setUploadingBg(false);
     }
@@ -250,12 +258,15 @@ export default function EventSettingsPage() {
         headers: { 'Content-Type': 'application/json', ...(tokenHeader() || {}) },
         body: JSON.stringify({ resetBranding })
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       setMessage(resetBranding ? 'Tamu terhapus dan branding direset.' : 'Tamu terhapus.');
       const r = await fetch(`${apiBase()}/events/active`, { headers: tokenHeader() });
       if (r.ok) setCfg(await r.json());
     } catch (e: any) {
-      setError(e.message || 'Gagal purge');
+      setError(e.message || 'Gagal menghapus data.');
     } finally {
       setPurging(false);
     }
@@ -274,7 +285,7 @@ export default function EventSettingsPage() {
           <h1 className="text-2xl md:text-3xl font-bold text-white text-shadow-lg">Event Settings</h1>
 
           {/* Quick Management Links */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Link
               href="/admin/prizes"
               className="flex items-center justify-between p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-colors group"
@@ -318,6 +329,22 @@ export default function EventSettingsPage() {
                 <div>
                   <div className="font-medium text-white">User Management</div>
                   <div className="text-xs text-white/60">Kelola admin users</div>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-white/40 group-hover:text-white/70 transition-colors" />
+            </Link>
+
+            <Link
+              href="/admin/settings/email"
+              className="flex items-center justify-between p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-cyan-500/20">
+                  <Mail size={20} className="text-cyan-400" />
+                </div>
+                <div>
+                  <div className="font-medium text-white">Email Settings</div>
+                  <div className="text-xs text-white/60">Konfigurasi SMTP email</div>
                 </div>
               </div>
               <ChevronRight size={18} className="text-white/40 group-hover:text-white/70 transition-colors" />
@@ -728,5 +755,5 @@ export default function EventSettingsPage() {
   );
 }
 
-import { Type, Calendar, MapPin, Settings2, Image as ImageIcon, Monitor, Upload, Loader2, EyeOff, Save, Trash2, AlertTriangle, Gift, Dices, Package, UserCog, Trophy, ChevronRight, Camera, Users, Tag, X, Plus } from 'lucide-react';
+import { Type, Calendar, MapPin, Settings2, Image as ImageIcon, Monitor, Upload, Loader2, EyeOff, Save, Trash2, AlertTriangle, Gift, Dices, Package, UserCog, Trophy, ChevronRight, Camera, Users, Tag, X, Plus, Mail } from 'lucide-react';
 import Link from 'next/link';

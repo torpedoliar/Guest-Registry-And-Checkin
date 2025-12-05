@@ -73,7 +73,7 @@ export default function AboutPage() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                 <Users size={18} className="text-white" />
               </div>
-              <span className="text-white font-semibold">Guest Registry</span>
+              <span className="text-white font-semibold">Event Management System</span>
             </div>
           </div>
         </div>

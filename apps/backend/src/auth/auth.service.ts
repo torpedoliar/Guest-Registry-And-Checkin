@@ -60,4 +60,12 @@ export class AuthService {
     
     return { access_token };
   }
+
+  async verifyPasswordById(userId: string, password: string): Promise<boolean> {
+    const user = await this.prisma.adminUser.findUnique({ where: { id: userId } });
+    if (!user) {
+      return false;
+    }
+    return bcrypt.compare(password, user.passwordHash);
+  }
 }

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { apiBase, toApiUrl } from '../../../lib/api';
+import { apiBase, toApiUrl, parseErrorMessage } from '../../../lib/api';
 import { useRouter } from 'next/navigation';
 import Input from '../../../components/ui/Input';
 import Label from '../../../components/ui/Label';
@@ -30,7 +30,7 @@ export default function LoginPage() {
     fetch(`${apiBase()}/config/event`)
       .then(r => r.json())
       .then(data => setEventCfg(data))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const submit = async (e: React.FormEvent) => {
@@ -43,12 +43,15 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       const data = await res.json();
       localStorage.setItem('token', data.access_token);
       router.replace('/admin/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Login gagal. Silakan coba lagi.');
       setLoading(false);
     }
   };
@@ -67,10 +70,10 @@ export default function LoginPage() {
       {bgType === 'VIDEO' && bgVideo && (
         <video className="absolute inset-0 w-full h-full object-cover" src={toApiUrl(bgVideo)} muted loop autoPlay playsInline />
       )}
-      
+
       {/* Gradient Overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-900/90 via-purple-900/50 to-slate-900/90" style={{ opacity: overlayOpacity + 0.3 }} />
-      
+
       {/* Decorative Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-[30%] -left-[10%] w-[50%] h-[50%] bg-blue-500/20 rounded-full blur-[120px] animate-pulse" />
@@ -89,7 +92,7 @@ export default function LoginPage() {
             </div>
           )}
           <h1 className="text-3xl md:text-4xl font-bold text-white text-shadow-lg mb-2">
-            {eventCfg?.name || 'Guest Registry'}
+            {eventCfg?.name || 'Event Management System'}
           </h1>
           <p className="text-white/60 text-sm">Admin Panel</p>
         </div>
@@ -124,7 +127,7 @@ export default function LoginPage() {
                     onChange={(e) => setUsername(e.target.value)}
                     autoComplete="username"
                     placeholder="Masukkan username"
-                    className="pl-4 pr-4 py-3 bg-white/5 border-white/20 focus:border-blue-500/50 rounded-xl"
+                    className="pl-4 pr-4 py-3 bg-white/5 border-white/20 focus:border-blue-500/50 rounded-xl text-white"
                     disabled={loading}
                   />
                 </div>
@@ -140,7 +143,7 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="current-password"
                     placeholder="Masukkan password"
-                    className="pl-4 pr-12 py-3 bg-white/5 border-white/20 focus:border-blue-500/50 rounded-xl"
+                    className="pl-4 pr-12 py-3 bg-white/5 border-white/20 focus:border-blue-500/50 rounded-xl text-white"
                     disabled={loading}
                   />
                   <button
@@ -154,9 +157,9 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full flex items-center justify-center gap-2 py-3 text-base font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5" 
+            <Button
+              type="submit"
+              className="w-full flex items-center justify-center gap-2 py-3 text-base font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
               disabled={loading}
             >
               {loading ? (
@@ -175,8 +178,8 @@ export default function LoginPage() {
             <div className="pt-4 border-t border-white/10">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-white/50">Guest Registration System</span>
-                <Link 
-                  href="/about" 
+                <Link
+                  href="/about"
                   className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
                 >
                   About
@@ -188,8 +191,8 @@ export default function LoginPage() {
 
         {/* Quick Links */}
         <div className="mt-6 text-center">
-          <Link 
-            href="/checkin" 
+          <Link
+            href="/checkin"
             className="text-white/50 hover:text-white text-sm transition-colors"
           >
             ← Kembali ke halaman Check-in

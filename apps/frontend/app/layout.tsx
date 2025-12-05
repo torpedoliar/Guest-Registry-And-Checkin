@@ -8,7 +8,7 @@ import { QueryProvider } from '../lib/query-provider';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export const metadata = {
-  title: 'Guest Registry',
+  title: 'Event Management System',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

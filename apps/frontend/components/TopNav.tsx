@@ -143,7 +143,7 @@ export default function TopNav() {
                 <Users size={16} className="text-white" />
               </div>
               <span className="font-bold text-white text-lg hidden sm:block">
-                {eventCfg?.name || 'Guest Registry'}
+                {eventCfg?.name || 'Event Management System'}
               </span>
             </div>
             {/* Event Selector - only for authenticated users */}

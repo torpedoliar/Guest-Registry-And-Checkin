@@ -28,11 +28,19 @@ export class CreateGuestDto {
 
   @IsOptional()
   @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
   photoUrl?: string | null;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  tableLocation!: string;
+  tableLocation?: string;
 
   @IsOptional()
   @IsString()
@@ -108,4 +116,12 @@ export class BulkUpdateGuestsDto {
   @IsBoolean()
   @Transform(({ value }) => (typeof value === 'string' ? value === 'true' : value))
   souvenirTaken?: boolean;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
 }

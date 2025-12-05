@@ -13,6 +13,7 @@ import { UsersModule } from './users/users.module';
 import { LoggerModule } from './common/logger';
 import { AuditModule } from './common/audit';
 import { ReportsModule } from './reports/reports.module';
+import { EmailModule } from './email/email.module';
 import { throttlerConfig } from './common/throttler/throttler.config';
 
 import { HealthController } from './health.controller';
@@ -32,6 +33,7 @@ import { HealthController } from './health.controller';
     PublicModule,
     UsersModule,
     ReportsModule,
+    EmailModule,
   ],
   controllers: [HealthController],
   providers: [

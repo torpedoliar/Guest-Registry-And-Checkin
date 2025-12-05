@@ -26,11 +26,22 @@ export class EventsController {
     return this.events.findAll();
   }
 
-  // Get active event
+  // Get active event - MUST be before :id routes
   @UseGuards(JwtAuthGuard)
   @Get('events/active')
   getActive() {
     return this.events.getActive();
+  }
+
+  // Update active event - MUST be before :id routes
+  @UseGuards(JwtAuthGuard)
+  @Put('events/active')
+  async updateActive(@Body() body: UpdateEventDto) {
+    const updated = await this.events.setActiveConfig(body);
+    // Clear any preview first, then emit config update
+    emitEvent({ type: 'preview', data: null });
+    emitEvent({ type: 'config', data: updated });
+    return updated;
   }
 
   // Create new event
@@ -40,14 +51,14 @@ export class EventsController {
     return this.events.create(dto);
   }
 
-  // Get event by ID
+  // Get event by ID - MUST be after /active routes
   @UseGuards(JwtAuthGuard)
   @Get('events/:id')
   findById(@Param('id') id: string) {
     return this.events.findById(id);
   }
 
-  // Update event by ID
+  // Update event by ID - MUST be after /active routes
   @UseGuards(JwtAuthGuard)
   @Put('events/:id')
   async updateById(@Param('id') id: string, @Body() body: UpdateEventDto) {
@@ -87,17 +98,6 @@ export class EventsController {
   @Get('events/:id/stats')
   getStats(@Param('id') id: string) {
     return this.events.getStats(id);
-  }
-
-  // Update active event (legacy)
-  @UseGuards(JwtAuthGuard)
-  @Put('events/active')
-  async updateActive(@Body() body: UpdateEventDto) {
-    const updated = await this.events.setActiveConfig(body);
-    // Clear any preview first, then emit config update
-    emitEvent({ type: 'preview', data: null });
-    emitEvent({ type: 'config', data: updated });
-    return updated;
   }
 
   @UseGuards(JwtAuthGuard)

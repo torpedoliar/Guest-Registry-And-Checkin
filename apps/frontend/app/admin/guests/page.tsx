@@ -6,10 +6,12 @@ import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
 import Button from '../../../components/ui/Button';
 import { QRCodeSVG } from 'qrcode.react';
-import { QrCode, Edit, Trash2, CheckCircle, Gift, X, AlertTriangle, Users, Tag } from 'lucide-react';
+import { QrCode, Edit, Trash2, CheckCircle, Gift, X, AlertTriangle, Users, Tag, Mail, Send, Loader2, Settings, Trophy, Package } from 'lucide-react';
 import { useSSE } from '../../../lib/sse-context';
+import { Textarea } from '../../../components/ui/Textarea';
 
 type GuestCategory = 'REGULAR' | 'VIP' | 'VVIP' | 'MEDIA' | 'SPONSOR' | 'SPEAKER' | 'ORGANIZER';
+type RegistrationSource = 'MANUAL' | 'IMPORT' | 'WALKIN';
 
 const CATEGORY_CONFIG: Record<GuestCategory, { label: string; color: string; bg: string; border: string }> = {
   REGULAR: { label: 'Regular', color: 'text-gray-300', bg: 'bg-gray-500/20', border: 'border-gray-500/30' },
@@ -21,11 +23,40 @@ const CATEGORY_CONFIG: Record<GuestCategory, { label: string; color: string; bg:
   ORGANIZER: { label: 'Organizer', color: 'text-cyan-300', bg: 'bg-cyan-500/20', border: 'border-cyan-500/30' },
 };
 
+const SOURCE_CONFIG: Record<RegistrationSource, { label: string; color: string; bg: string; border: string }> = {
+  MANUAL: { label: 'Manual', color: 'text-gray-300', bg: 'bg-gray-500/20', border: 'border-gray-500/30' },
+  IMPORT: { label: 'Import', color: 'text-blue-300', bg: 'bg-blue-500/20', border: 'border-blue-500/30' },
+  WALKIN: { label: 'Walk-in', color: 'text-orange-300', bg: 'bg-orange-500/20', border: 'border-orange-500/30' },
+};
+
+interface PrizeWin {
+  id: string;
+  wonAt: string;
+  prize: { id: string; name: string; category: string };
+  collection?: { collectedAt: string; collectedByName?: string } | null;
+}
+
+interface SouvenirTake {
+  id: string;
+  takenAt: string;
+  takenByName?: string;
+  souvenir: { id: string; name: string };
+}
+
+interface GuestCheckin {
+  id: string;
+  checkinAt: string;
+  checkinByName?: string;
+  counterName?: string;
+}
+
 interface Guest {
   id: string;
   queueNumber: number;
   guestId: string;
   name: string;
+  email?: string | null;
+  phone?: string | null;
   photoUrl?: string | null;
   tableLocation: string;
   company?: string | null;
@@ -33,9 +64,16 @@ interface Guest {
   division?: string | null;
   notes?: string | null;
   category: GuestCategory;
+  registrationSource?: RegistrationSource;
   checkedIn: boolean;
   checkedInAt?: string | null;
   souvenirTaken: boolean;
+  emailSent?: boolean;
+  emailSentAt?: string | null;
+  prizeWins?: PrizeWin[];
+  souvenirTakes?: SouvenirTake[];
+  checkins?: GuestCheckin[];
+  checkinCount?: number;
 }
 
 interface GuestsResponse { data: Guest[]; total: number }
@@ -69,6 +107,12 @@ export default function GuestsListPage() {
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   const [bulkCategory, setBulkCategory] = useState<GuestCategory | ''>('');
+
+  // Email state
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailCustomMessage, setEmailCustomMessage] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailTargetIds, setEmailTargetIds] = useState<string[]>([]);
 
   const [eventCfg, setEventCfg] = useState<any>(null);
   const { addEventListener, removeEventListener } = useSSE();
@@ -353,7 +397,7 @@ export default function GuestsListPage() {
     try {
       const res = await apiFetch<{ updated: number }>('/guests/bulk-update', {
         method: 'POST',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           ids: Array.from(selectedIds),
           category: bulkCategory,
         }),
@@ -381,7 +425,7 @@ export default function GuestsListPage() {
     try {
       const res = await apiFetch<{ updated: number }>('/guests/bulk-update', {
         method: 'POST',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           ids: Array.from(selectedIds),
           checkedIn,
         }),
@@ -393,6 +437,56 @@ export default function GuestsListPage() {
       setError(e.message || `Gagal ${action}`);
     } finally {
       setBulkActionLoading(false);
+    }
+  };
+
+  // Email functions
+  const openEmailModal = (guestIds: string[]) => {
+    const guestsWithEmail = resp?.data?.filter(g => guestIds.includes(g.id) && g.email) || [];
+    if (guestsWithEmail.length === 0) {
+      setError('Tidak ada tamu dengan email yang dipilih');
+      return;
+    }
+    setEmailTargetIds(guestsWithEmail.map(g => g.id));
+    setEmailCustomMessage('');
+    setShowEmailModal(true);
+  };
+
+  const sendEmails = async () => {
+    if (emailTargetIds.length === 0) return;
+
+    setSendingEmail(true);
+    setError(null);
+    try {
+      if (emailTargetIds.length === 1) {
+        // Single email
+        await apiFetch('/email/send', {
+          method: 'POST',
+          body: JSON.stringify({
+            guestId: emailTargetIds[0],
+            customMessage: emailCustomMessage
+          }),
+        });
+        setMessage('Email berhasil dikirim!');
+      } else {
+        // Bulk email
+        const result = await apiFetch<{ sent: number; failed: number; skipped: number }>('/email/send-bulk', {
+          method: 'POST',
+          body: JSON.stringify({
+            guestIds: emailTargetIds,
+            customMessage: emailCustomMessage
+          }),
+        });
+        setMessage(`Email terkirim: ${result.sent}, Gagal: ${result.failed}, Dilewati: ${result.skipped}`);
+      }
+      setShowEmailModal(false);
+      setEmailTargetIds([]);
+      setSelectedIds(new Set());
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Gagal mengirim email');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -445,7 +539,7 @@ export default function GuestsListPage() {
           </Button>
           <Button
             size="sm"
-            variant="ghost"
+            variant="secondary"
             className="ml-auto"
             onClick={doExport}
             disabled={exporting}
@@ -455,7 +549,7 @@ export default function GuestsListPage() {
           </Button>
           <Button
             size="sm"
-            variant="ghost"
+            variant="secondary"
             className="ml-2"
             onClick={doExportFull}
             disabled={exportingFull}
@@ -465,7 +559,7 @@ export default function GuestsListPage() {
           </Button>
           <Button
             size="sm"
-            variant="ghost"
+            variant="secondary"
             className="ml-2"
             onClick={doExportPdf}
             disabled={exportingPdf}
@@ -498,6 +592,15 @@ export default function GuestsListPage() {
             >
               <CheckCircle size={14} className="mr-1" />
               Check-in
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => openEmailModal(Array.from(selectedIds))}
+              disabled={bulkActionLoading}
+            >
+              <Mail size={14} className="mr-1" />
+              Kirim Email
             </Button>
             <Button
               size="sm"
@@ -558,10 +661,10 @@ export default function GuestsListPage() {
         <Card variant="glass" className="overflow-hidden p-0">
           {loading && <div className="p-3 text-sm text-white/80">Memuat data...</div>}
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/20 bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-white/70">
-                  <th className="px-4 py-3 w-10">
+                  <th className="px-2 py-3 w-10">
                     <input
                       type="checkbox"
                       checked={!!(resp?.data && resp.data.length > 0 && selectedIds.size === resp.data.length)}
@@ -569,27 +672,30 @@ export default function GuestsListPage() {
                       className="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500"
                     />
                   </th>
-                  <th className="px-4 py-3">No</th>
-                  <th className="px-4 py-3">Foto</th>
-                  <th className="px-4 py-3">ID</th>
-                  <th className="px-4 py-3">Nama</th>
-                  <th className="px-4 py-3">Kategori</th>
-                  <th className="px-4 py-3">Meja</th>
-                  <th className="px-4 py-3">Perusahaan</th>
-                  <th className="px-4 py-3">Divisi</th>
-                  <th className="px-4 py-3">Departemen</th>
-                  <th className="px-4 py-3">Waktu Check-in</th>
-                  {eventCfg?.enableSouvenir && <th className="px-4 py-3 text-center">Souvenir</th>}
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3 text-right">Aksi</th>
+                  <th className="px-2 py-3">No</th>
+                  <th className="px-2 py-3">Foto</th>
+                  <th className="px-2 py-3">ID</th>
+                  <th className="px-2 py-3">Nama</th>
+                  <th className="px-2 py-3">Email</th>
+                  <th className="px-2 py-3">Kategori</th>
+                  <th className="px-2 py-3">Meja</th>
+                  <th className="px-2 py-3">Perusahaan</th>
+                  <th className="px-2 py-3">Divisi</th>
+                  <th className="px-2 py-3">Departemen</th>
+                  <th className="px-2 py-3">Waktu Check-in</th>
+                  {eventCfg?.enableSouvenir && <th className="px-2 py-3 text-center">Souvenir</th>}
+                  <th className="px-2 py-3 text-center">Hadiah</th>
+                  <th className="px-2 py-3 text-center">Status</th>
+                  <th className="px-2 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10">
                 {resp?.data.map((g) => {
                   const cat = CATEGORY_CONFIG[g.category] || CATEGORY_CONFIG.REGULAR;
+                  const src = g.registrationSource ? SOURCE_CONFIG[g.registrationSource] : null;
                   return (
                     <tr key={g.id} className={`hover:bg-white/5 transition-colors ${selectedIds.has(g.id) ? 'bg-blue-500/10' : ''}`}>
-                      <td className="px-4 py-3 align-middle">
+                      <td className="px-2 py-3 align-middle">
                         <input
                           type="checkbox"
                           checked={selectedIds.has(g.id)}
@@ -597,8 +703,8 @@ export default function GuestsListPage() {
                           className="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500"
                         />
                       </td>
-                      <td className="px-4 py-3 text-xs text-white/70 align-middle">{g.queueNumber}</td>
-                      <td className="px-4 py-3 align-middle">
+                      <td className="px-2 py-3 text-xs text-white/70 align-middle">{g.queueNumber}</td>
+                      <td className="px-2 py-3 align-middle">
                         {g.photoUrl ? (
                           <img src={toApiUrl(g.photoUrl)} alt={g.name} className="h-10 w-10 rounded-full object-cover border border-white/20" />
                         ) : (
@@ -607,8 +713,8 @@ export default function GuestsListPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-white/80 align-middle">{g.guestId}</td>
-                      <td className="px-4 py-3 text-white font-medium align-middle">
+                      <td className="px-2 py-3 font-mono text-xs text-white/80 align-middle">{g.guestId}</td>
+                      <td className="px-2 py-3 text-white font-medium align-middle">
                         {g.name}
                         {g.notes && (
                           <div className="text-xs text-amber-300/80 mt-1 px-2 py-1 bg-amber-500/10 rounded border border-amber-500/20 max-w-xs truncate">
@@ -616,35 +722,83 @@ export default function GuestsListPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 align-middle">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cat.bg} ${cat.color} border ${cat.border}`}>
-                          {cat.label}
-                        </span>
+                      <td className="px-2 py-3 text-white/70 text-xs align-middle">
+                        {g.email ? (
+                          <span className="flex items-center gap-1">
+                            <Mail size={12} className="text-blue-400" />
+                            <span>{g.email}</span>
+                          </span>
+                        ) : '-'}
                       </td>
-                      <td className="px-4 py-3 text-white align-middle">{g.tableLocation}</td>
-                      <td className="px-4 py-3 text-white/70 align-middle">{g.company || '-'}</td>
-                      <td className="px-4 py-3 text-white/70 align-middle">{g.division || '-'}</td>
-                      <td className="px-4 py-3 text-white/70 align-middle">{g.department || '-'}</td>
-                      <td className="px-4 py-3 text-white/70 text-xs align-middle">
+                      <td className="px-2 py-3 align-middle">
+                        <div className="flex flex-wrap gap-1">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cat.bg} ${cat.color} border ${cat.border}`}>
+                            {cat.label}
+                          </span>
+                          {src && g.registrationSource === 'WALKIN' && (
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${src.bg} ${src.color} border ${src.border}`}>
+                              {src.label}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-2 py-3 text-white align-middle">{g.tableLocation}</td>
+                      <td className="px-2 py-3 text-white/70 align-middle">{g.company || '-'}</td>
+                      <td className="px-2 py-3 text-white/70 align-middle">{g.division || '-'}</td>
+                      <td className="px-2 py-3 text-white/70 align-middle">{g.department || '-'}</td>
+                      <td className="px-2 py-3 text-white/70 text-xs align-middle">
                         {g.checkedInAt ? new Date(g.checkedInAt).toLocaleString('id-ID', { hour12: false }) : '-'}
                       </td>
                       {eventCfg?.enableSouvenir && (
-                        <td className="px-4 py-3 align-middle text-center">
-                          <button
-                            onClick={() => toggleSouvenir(g.id, g.souvenirTaken)}
-                            className={`p-1.5 rounded-full transition-colors ${g.souvenirTaken ? 'bg-brand-primary text-white' : 'bg-white/10 text-white/30 hover:bg-white/20'}`}
-                            title={g.souvenirTaken ? 'Sudah ambil souvenir' : 'Belum ambil souvenir'}
-                          >
-                            <Gift size={16} />
-                          </button>
+                        <td className="px-2 py-3 align-middle text-center">
+                          {g.souvenirTakes && g.souvenirTakes.length > 0 ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                <Package size={12} />
+                                {g.souvenirTakes.length}
+                              </span>
+                              <span className="text-[10px] text-white/50 max-w-[100px] truncate" title={g.souvenirTakes.map(s => s.souvenir.name).join(', ')}>
+                                {g.souvenirTakes.map(s => s.souvenir.name).join(', ')}
+                              </span>
+                            </div>
+                          ) : g.souvenirTaken ? (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                              <Gift size={12} />
+                              Ya
+                            </span>
+                          ) : (
+                            <span className="text-white/30 text-xs">-</span>
+                          )}
                         </td>
                       )}
-                      <td className="px-4 py-3 align-middle text-center">
+                      <td className="px-2 py-3 align-middle text-center">
+                        {g.prizeWins && g.prizeWins.length > 0 ? (
+                          <div className="flex flex-col items-center gap-1">
+                            {g.prizeWins.map((pw, idx) => (
+                              <span 
+                                key={idx} 
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  pw.collection 
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                }`}
+                                title={`${pw.prize.name} - ${pw.collection ? 'Sudah diambil' : 'Belum diambil'}`}
+                              >
+                                <Trophy size={12} />
+                                <span className="max-w-[80px] truncate">{pw.prize.name}</span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-white/30 text-xs">-</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-3 align-middle text-center">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${g.checkedIn ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>
                           {g.checkedIn ? 'Checked-in' : 'Belum'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right align-middle">
+                      <td className="px-2 py-3 text-right align-middle">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             title="Tampilkan QR"
@@ -653,6 +807,14 @@ export default function GuestsListPage() {
                           >
                             <QrCode size={18} />
                           </button>
+                          <button
+                            title={g.checkedIn ? "Sudah Check-in" : "Check-in Manual"}
+                            className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${g.checkedIn ? 'text-emerald-400/50 cursor-not-allowed' : 'text-emerald-400 hover:bg-emerald-400/10 hover:text-emerald-300'}`}
+                            disabled={g.checkedIn || busyCheckinId === g.id}
+                            onClick={() => markCheckedIn(g.id)}
+                          >
+                            <CheckCircle size={18} />
+                          </button>
                           <a
                             title="Edit Tamu"
                             className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-400/10 hover:text-blue-300 transition-colors"
@@ -660,14 +822,13 @@ export default function GuestsListPage() {
                           >
                             <Edit size={18} />
                           </a>
-                          {!g.checkedIn && (
+                          {g.email && (
                             <button
-                              title="Check-in Manual"
-                              className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-400/10 hover:text-emerald-300 transition-colors disabled:opacity-50"
-                              disabled={busyCheckinId === g.id}
-                              onClick={() => markCheckedIn(g.id)}
+                              title="Kirim Email Undangan"
+                              className="p-1.5 rounded-lg text-cyan-400 hover:bg-cyan-400/10 hover:text-cyan-300 transition-colors"
+                              onClick={() => openEmailModal([g.id])}
                             >
-                              <CheckCircle size={18} />
+                              <Send size={18} />
                             </button>
                           )}
                           <button
@@ -744,11 +905,10 @@ export default function GuestsListPage() {
                       <button
                         key={cat}
                         onClick={() => setBulkCategory(cat)}
-                        className={`p-3 rounded-lg border text-left transition-all ${
-                          bulkCategory === cat 
-                            ? `${cfg.bg} ${cfg.border} ring-2 ring-blue-500` 
-                            : 'border-white/20 bg-white/5 hover:bg-white/10'
-                        }`}
+                        className={`p-3 rounded-lg border text-left transition-all ${bulkCategory === cat
+                          ? `${cfg.bg} ${cfg.border} ring-2 ring-blue-500`
+                          : 'border-white/20 bg-white/5 hover:bg-white/10'
+                          }`}
                       >
                         <span className={`text-sm font-medium ${cfg.color}`}>{cfg.label}</span>
                       </button>
@@ -770,6 +930,79 @@ export default function GuestsListPage() {
                   className="flex-1"
                 >
                   {bulkActionLoading ? 'Menyimpan...' : 'Simpan'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Email Modal */}
+        {showEmailModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowEmailModal(false)}>
+            <div className="w-full max-w-lg rounded-xl bg-slate-900 border border-white/20 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="mb-4 text-lg font-bold text-white flex items-center gap-2">
+                <Mail size={20} className="text-blue-400" />
+                Kirim Email Undangan
+              </h3>
+
+              <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-sm text-blue-300">
+                  <strong>{emailTargetIds.length}</strong> tamu dengan email akan menerima undangan
+                </p>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm text-white/70 mb-2">
+                  Pesan Kustom dari Administrator (opsional)
+                </label>
+                <Textarea
+                  rows={4}
+                  placeholder="Contoh: Kami tunggu kehadiran Bapak/Ibu. Mohon hadir 30 menit sebelum acara dimulai."
+                  value={emailCustomMessage}
+                  onChange={(e) => setEmailCustomMessage(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-white/50">
+                  Pesan ini akan ditampilkan di dalam email undangan
+                </p>
+              </div>
+
+              <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <p className="text-sm text-amber-300 flex items-start gap-2">
+                  <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+                  <span>
+                    Pastikan pengaturan email sudah dikonfigurasi di{' '}
+                    <a href="/admin/settings/email" className="underline hover:text-amber-200">
+                      Settings → Email
+                    </a>
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => { setShowEmailModal(false); setEmailTargetIds([]); }}
+                  className="flex-1"
+                  disabled={sendingEmail}
+                >
+                  Batal
+                </Button>
+                <Button
+                  onClick={sendEmails}
+                  disabled={sendingEmail || emailTargetIds.length === 0}
+                  className="flex-1"
+                >
+                  {sendingEmail ? (
+                    <>
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                      Mengirim...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} className="mr-2" />
+                      Kirim Email
+                    </>
+                  )}
                 </Button>
               </div>
             </div>

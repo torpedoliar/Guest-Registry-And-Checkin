@@ -1,7 +1,7 @@
 "use client";
 import RequireAuth from '../../../../components/RequireAuth';
 import { useEffect, useState } from 'react';
-import { apiBase } from '../../../../lib/api';
+import { apiBase, parseErrorMessage } from '../../../../lib/api';
 import Card from '../../../../components/ui/Card';
 import Input from '../../../../components/ui/Input';
 import Label from '../../../../components/ui/Label';
@@ -162,7 +162,10 @@ export default function EventCalendarPage() {
         method: 'POST',
         headers: tokenHeader(),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       setMessage('Event diaktifkan');
       await fetchEvents();
       setTimeout(() => setMessage(null), 3000);
@@ -187,7 +190,10 @@ export default function EventCalendarPage() {
           location: newLocation.trim() || undefined,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       setMessage('Event berhasil dibuat');
       setNewName('');
       setNewDate('');

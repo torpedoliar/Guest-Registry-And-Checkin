@@ -13,10 +13,13 @@ import {
   UseInterceptors,
   Patch,
   Request,
+  UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthService } from '../auth/auth.service';
 import { photosStorage } from '../common/storage';
 import { CreateGuestDto, BulkDeleteGuestsDto, BulkUpdateGuestsDto, GuestCategory } from './dto/create-guest.dto';
 import { QueryGuestsDto } from './dto/query-guests.dto';
@@ -33,7 +36,10 @@ import * as path from 'path';
 
 @Controller()
 export class GuestsController {
-  constructor(private readonly guests: GuestsService) { }
+  constructor(
+    private readonly guests: GuestsService,
+    private readonly auth: AuthService,
+  ) { }
 
   @UseGuards(JwtAuthGuard)
   @Get('guests')
@@ -105,10 +111,12 @@ export class GuestsController {
         'guest_id': g.guestId,
         'name': g.name,
         'table_location': g.tableLocation,
+        'email': g.email ?? '',
         'company': g.company ?? '',
         'department': g.department ?? '',
         'division': g.division ?? '',
         'category': g.category ?? 'REGULAR',
+        'registration_source': g.registrationSource ?? 'MANUAL',
         'notes': g.notes ?? '',
       }));
 
@@ -184,20 +192,34 @@ export class GuestsController {
         return;
       }
 
+      // Helper to format registration source
+      const formatSource = (source: string | null | undefined): string => {
+        switch (source) {
+          case 'MANUAL': return 'Manual (Admin)';
+          case 'IMPORT': return 'Import Excel';
+          case 'WALKIN': return 'Walk-in (Check-in)';
+          default: return 'Manual (Admin)';
+        }
+      };
+
       // Build guest data rows
       const guestRows = allGuests.map((g: any) => ({
         'No. Antrian': g.queueNumber ?? '',
         'Guest ID': g.guestId,
         'Nama': g.name,
+        'Email': g.email ?? '',
         'Kategori': g.category ?? 'REGULAR',
+        'Sumber Registrasi': formatSource(g.registrationSource),
         'Meja/Ruangan': g.tableLocation,
         'Perusahaan': g.company ?? '',
         'Departemen': g.department ?? '',
         'Divisi': g.division ?? '',
         'Catatan': g.notes ?? '',
         'Check-in': g.checkedIn ? 'Ya' : 'Tidak',
+        'Jumlah Check-in': g.checkinCount ?? (g.checkedIn ? 1 : 0),
         'Waktu Check-in': formatLocalTime(g.checkedInAt),
-        'Check-in Oleh': g.checkedInByName ?? '',
+        'Check-in Oleh': g.checkins?.map((c: any) => c.checkinByName).filter(Boolean).join(', ') || g.checkedInByName || '',
+        'Detail Check-in': g.checkins?.map((c: any) => `${c.checkinByName || 'Admin'} (${formatLocalTime(c.checkinAt)})`).join('; ') || '',
         'Souvenir Diambil': g.souvenirTaken ? 'Ya' : 'Tidak',
         'Souvenir': g.souvenirTakes?.map((st: any) => st.souvenir?.name).filter(Boolean).join(', ') || '',
         'Souvenir Diberikan Oleh': g.souvenirTakes?.map((st: any) => st.takenByName).filter(Boolean).join(', ') || '',
@@ -384,17 +406,30 @@ export class GuestsController {
     doc.moveDown(1);
     let tableY = boxY + boxHeight + 20;
 
+    // Helper to format registration source for PDF
+    const formatSourcePdf = (source: string | null | undefined): string => {
+      switch (source) {
+        case 'MANUAL': return 'Manual';
+        case 'IMPORT': return 'Import';
+        case 'WALKIN': return 'Walk-in';
+        default: return 'Manual';
+      }
+    };
+
     // Table columns
     const cols = [
-      { label: 'No', width: 30, align: 'center' as const },
-      { label: 'ID', width: 70, align: 'left' as const },
-      { label: 'Nama', width: 140, align: 'left' as const },
-      { label: 'Perusahaan', width: 120, align: 'left' as const },
-      { label: 'Meja', width: 60, align: 'center' as const },
-      { label: 'Kategori', width: 60, align: 'center' as const },
-      { label: 'Status', width: 70, align: 'center' as const },
-      { label: 'Waktu Check-in', width: 100, align: 'center' as const },
-      { label: 'Check-in Oleh', width: 90, align: 'left' as const },
+      { label: 'No', width: 28, align: 'center' as const },
+      { label: 'ID', width: 55, align: 'left' as const },
+      { label: 'Nama', width: 90, align: 'left' as const },
+      { label: 'Email', width: 85, align: 'left' as const },
+      { label: 'Perusahaan', width: 70, align: 'left' as const },
+      { label: 'Meja', width: 40, align: 'center' as const },
+      { label: 'Kategori', width: 45, align: 'center' as const },
+      { label: 'Sumber', width: 45, align: 'center' as const },
+      { label: 'Status', width: 50, align: 'center' as const },
+      { label: 'Jml CI', width: 35, align: 'center' as const },
+      { label: 'Waktu Check-in', width: 75, align: 'center' as const },
+      { label: 'Check-in Oleh', width: 100, align: 'left' as const },
       { label: 'Souvenir', width: 50, align: 'center' as const },
     ];
 
@@ -433,66 +468,85 @@ export class GuestsController {
 
       // ID
       doc.font('Helvetica').fillColor('#3b82f6')
-         .text(truncateText(guest.guestId, 12), colX + 4, y + 7, { width: cols[1].width - 8 });
+         .text(truncateText(guest.guestId, 10), colX + 4, y + 7, { width: cols[1].width - 8 });
       colX += cols[1].width;
 
       // Nama
       doc.font('Helvetica-Bold').fillColor('#1e293b')
-         .text(truncateText(guest.name, 25), colX + 4, y + 7, { width: cols[2].width - 8 });
+         .text(truncateText(guest.name, 18), colX + 4, y + 7, { width: cols[2].width - 8 });
       colX += cols[2].width;
+
+      // Email
+      doc.font('Helvetica').fillColor('#64748b')
+         .text(truncateText(guest.email || '-', 18), colX + 4, y + 7, { width: cols[3].width - 8 });
+      colX += cols[3].width;
 
       // Perusahaan
       doc.font('Helvetica').fillColor('#64748b')
-         .text(truncateText(guest.company || '-', 20), colX + 4, y + 7, { width: cols[3].width - 8 });
-      colX += cols[3].width;
+         .text(truncateText(guest.company || '-', 15), colX + 4, y + 7, { width: cols[4].width - 8 });
+      colX += cols[4].width;
 
       // Meja
       doc.fillColor('#374151')
-         .text(truncateText(guest.tableLocation, 10), colX + 4, y + 7, { width: cols[4].width - 8, align: 'center' });
-      colX += cols[4].width;
+         .text(truncateText(guest.tableLocation, 8), colX + 4, y + 7, { width: cols[5].width - 8, align: 'center' });
+      colX += cols[5].width;
 
       // Kategori
       const catColor = guest.category === 'VVIP' ? '#dc2626' : guest.category === 'VIP' ? '#f59e0b' : '#6b7280';
       doc.fillColor(catColor)
-         .text(guest.category || 'REGULAR', colX + 4, y + 7, { width: cols[5].width - 8, align: 'center' });
-      colX += cols[5].width;
+         .text(guest.category || 'REGULAR', colX + 4, y + 7, { width: cols[6].width - 8, align: 'center' });
+      colX += cols[6].width;
+
+      // Sumber Registrasi
+      const sourceText = formatSourcePdf(guest.registrationSource);
+      const sourceColor = guest.registrationSource === 'WALKIN' ? '#f97316' : guest.registrationSource === 'IMPORT' ? '#3b82f6' : '#6b7280';
+      doc.fillColor(sourceColor)
+         .text(sourceText, colX + 4, y + 7, { width: cols[7].width - 8, align: 'center' });
+      colX += cols[7].width;
 
       // Status
       if (guest.checkedIn) {
         doc.save();
-        doc.roundedRect(colX + 8, y + 4, cols[6].width - 16, 14, 3).fill('#22c55e');
+        doc.roundedRect(colX + 6, y + 4, cols[8].width - 12, 14, 3).fill('#22c55e');
         doc.fontSize(7).font('Helvetica-Bold').fillColor('#ffffff')
-           .text('HADIR', colX + 8, y + 7, { width: cols[6].width - 16, align: 'center' });
+           .text('HADIR', colX + 6, y + 7, { width: cols[8].width - 12, align: 'center' });
         doc.restore();
       } else {
         doc.save();
-        doc.roundedRect(colX + 8, y + 4, cols[6].width - 16, 14, 3).fill('#ef4444');
+        doc.roundedRect(colX + 6, y + 4, cols[8].width - 12, 14, 3).fill('#ef4444');
         doc.fontSize(7).font('Helvetica-Bold').fillColor('#ffffff')
-           .text('BELUM', colX + 8, y + 7, { width: cols[6].width - 16, align: 'center' });
+           .text('BELUM', colX + 6, y + 7, { width: cols[8].width - 12, align: 'center' });
         doc.restore();
       }
-      colX += cols[6].width;
+      colX += cols[8].width;
+
+      // Jumlah Check-in
+      const checkinCount = guest.checkinCount ?? (guest.checkedIn ? 1 : 0);
+      doc.font('Helvetica-Bold').fontSize(8).fillColor(checkinCount > 1 ? '#8b5cf6' : '#374151')
+         .text(String(checkinCount), colX + 4, y + 7, { width: cols[9].width - 8, align: 'center' });
+      colX += cols[9].width;
 
       // Waktu Check-in
       doc.font('Helvetica').fontSize(8).fillColor('#64748b')
-         .text(guest.checkedInAt ? formatLocalTime(guest.checkedInAt) : '-', colX + 4, y + 7, { width: cols[7].width - 8, align: 'center' });
-      colX += cols[7].width;
+         .text(guest.checkedInAt ? formatLocalTime(guest.checkedInAt) : '-', colX + 4, y + 7, { width: cols[10].width - 8, align: 'center' });
+      colX += cols[10].width;
 
-      // Check-in Oleh
+      // Check-in Oleh (show all admins if multiple check-ins)
+      const checkinAdmins = guest.checkins?.map((c: any) => c.checkinByName).filter(Boolean).join(', ') || guest.checkedInByName || '-';
       doc.fillColor('#64748b')
-         .text(truncateText(guest.checkedInByName || '-', 15), colX + 4, y + 7, { width: cols[8].width - 8 });
-      colX += cols[8].width;
+         .text(truncateText(checkinAdmins, 18), colX + 4, y + 7, { width: cols[11].width - 8 });
+      colX += cols[11].width;
 
       // Souvenir
       if (guest.souvenirTaken) {
         doc.save();
-        doc.roundedRect(colX + 12, y + 4, cols[9].width - 24, 14, 3).fill('#8b5cf6');
+        doc.roundedRect(colX + 10, y + 4, cols[12].width - 20, 14, 3).fill('#8b5cf6');
         doc.fontSize(7).font('Helvetica-Bold').fillColor('#ffffff')
-           .text('YA', colX + 12, y + 7, { width: cols[9].width - 24, align: 'center' });
+           .text('YA', colX + 10, y + 7, { width: cols[12].width - 20, align: 'center' });
         doc.restore();
       } else {
         doc.fontSize(8).font('Helvetica').fillColor('#94a3b8')
-           .text('-', colX + 4, y + 7, { width: cols[9].width - 8, align: 'center' });
+           .text('-', colX + 4, y + 7, { width: cols[12].width - 8, align: 'center' });
       }
     };
 
@@ -674,10 +728,30 @@ export class GuestsController {
 
   @UseGuards(JwtAuthGuard)
   @Post('guests/:id/uncheckin')
-  async uncheckIn(@Param('id') id: string, @Request() req: any) {
+  async uncheckIn(
+    @Param('id') id: string,
+    @Body() body: { password: string; reason: string },
+    @Request() req: any,
+  ) {
     const adminId = req.user?.sub;
     const adminName = req.user?.displayName || req.user?.username || 'Admin';
-    const updated = await this.guests.uncheckIn(id, adminId, adminName);
+
+    // Validate required fields
+    if (!body?.password) {
+      throw new BadRequestException('Password diperlukan untuk membatalkan check-in');
+    }
+    if (!body?.reason || body.reason.trim().length < 5) {
+      throw new BadRequestException('Alasan pembatalan harus diisi (minimal 5 karakter)');
+    }
+
+    // Verify password
+    const isValidPassword = await this.auth.verifyPasswordById(adminId, body.password);
+    if (!isValidPassword) {
+      throw new UnauthorizedException('Password salah');
+    }
+
+    // Proceed with uncheckin (includes audit logging)
+    const updated = await this.guests.uncheckIn(id, adminId, adminName, body.reason.trim());
     emitEvent({ type: 'uncheckin', data: updated });
     return updated;
   }
@@ -731,7 +805,7 @@ export class GuestsController {
     const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
     if (rows.length === 0) {
-      throw new Error('File Excel kosong. Pastikan sheet pertama memiliki data dengan header: guest_id, name, table_location, company, department, division, category, notes');
+      throw new Error('File Excel kosong. Pastikan sheet pertama memiliki data dengan header: guest_id, name, table_location, email, company, department, division, category, notes');
     }
 
     const allowDuplicateGuestId = activeEvent.allowDuplicateGuestId ?? false;
@@ -741,6 +815,7 @@ export class GuestsController {
       guestId: string;
       name: string;
       tableLocation: string;
+      email?: string;
       company?: string;
       department?: string;
       division?: string;
@@ -755,6 +830,7 @@ export class GuestsController {
       const guestId = row['guest_id'] ?? row['guestId'] ?? row['Guest ID'] ?? row['Guest Id'] ?? row['ID'] ?? row['id'];
       const name = row['name'] ?? row['Name'] ?? row['Nama'] ?? row['nama'];
       const tableLocation = row['table_location'] ?? row['table'] ?? row['Table'] ?? row['tableLocation'] ?? row['Meja'] ?? row['meja'] ?? row['Meja/Ruangan'];
+      const email = row['email'] ?? row['Email'] ?? row['EMAIL'] ?? row['e-mail'] ?? row['E-mail'] ?? undefined;
       const company = row['company'] ?? row['organization'] ?? row['Company'] ?? row['Perusahaan'] ?? row['perusahaan'] ?? undefined;
       const department = row['department'] ?? row['Department'] ?? row['Departemen'] ?? row['departemen'] ?? undefined;
       const division = row['division'] ?? row['Division'] ?? row['divisi'] ?? row['Divisi'] ?? undefined;
@@ -769,7 +845,7 @@ export class GuestsController {
         invalidRows.push({ row: i + 2, reason: `Kolom wajib kosong: ${missing.join(', ')}` });
         continue;
       }
-      parsedRows.push({ guestId: String(guestId), name: String(name), tableLocation: String(tableLocation), company, department, division, notes, category });
+      parsedRows.push({ guestId: String(guestId), name: String(name), tableLocation: String(tableLocation), email, company, department, division, notes, category });
     }
 
     if (parsedRows.length === 0) {
@@ -822,12 +898,13 @@ export class GuestsController {
           guestId: row.guestId,
           name: row.name,
           tableLocation: row.tableLocation,
+          email: row.email,
           company: row.company,
           department: row.department,
           division: row.division,
           notes: row.notes,
           category: categoryEnum,
-        }, undefined, allowDuplicateGuestId);
+        }, undefined, allowDuplicateGuestId, 'IMPORT');
         created++;
       } catch {
         skipped++;

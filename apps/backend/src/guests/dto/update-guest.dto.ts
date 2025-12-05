@@ -19,6 +19,10 @@ export class UpdateGuestDto {
 
   @IsOptional()
   @IsString()
+  email?: string | null;
+
+  @IsOptional()
+  @IsString()
   photoUrl?: string | null;
 
   @IsOptional()

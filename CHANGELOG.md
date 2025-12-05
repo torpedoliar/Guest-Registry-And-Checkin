@@ -1,6 +1,6 @@
 # Version History & Changelog
 
-## Guest Registration & Check-in System
+## Event Management System (formerly Guest Registry)
 
 Dokumen ini mencatat riwayat pengembangan aplikasi dari awal hingga versi terkini.
 
@@ -9,29 +9,153 @@ Dokumen ini mencatat riwayat pengembangan aplikasi dari awal hingga versi terkin
 ## Timeline Overview
 
 ```
-┌───────────────────────────────────────────────────────────────────────────────────────┐
-│                           DEVELOPMENT TIMELINE                                         │
-├───────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│  v0.1.0       v0.2.0       v0.3.0       v0.4.0       v1.0.0       v1.1.0             │
-│    │            │            │            │            │            │                 │
-│    ▼            ▼            ▼            ▼            ▼            ▼                 │
-│  ┌───┐        ┌───┐        ┌───┐        ┌───┐        ┌───┐        ┌───┐              │
-│  │ ● │────────│ ● │────────│ ● │────────│ ● │────────│ ● │────────│ ● │              │
-│  └───┘        └───┘        └───┘        └───┘        └───┘        └───┘              │
-│    │            │            │            │            │            │                 │
-│  Project     Guest        Lucky       Souvenir     Final       Security              │
-│  Setup       Mgmt         Draw        System       Release     & Perf                │
-│                                                                                        │
-└───────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    DEVELOPMENT TIMELINE                                                   │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                           │
+│  v0.1.0       v0.2.0       v0.3.0       v0.4.0       v1.0.0       v1.1.0       v1.2.0       v1.3.0       │
+│    │            │            │            │            │            │            │            │          │
+│    ▼            ▼            ▼            ▼            ▼            ▼            ▼            ▼          │
+│  ┌───┐        ┌───┐        ┌───┐        ┌───┐        ┌───┐        ┌───┐        ┌───┐        ┌───┐        │
+│  │ ● │────────│ ● │────────│ ● │────────│ ● │────────│ ● │────────│ ● │────────│ ● │────────│ ● │        │
+│  └───┘        └───┘        └───┘        └───┘        └───┘        └───┘        └───┘        └───┘        │
+│    │            │            │            │            │            │            │            │          │
+│  Project     Guest        Lucky       Souvenir     Final       Security      Email        Rebrand       │
+│  Setup       Mgmt         Draw        System       Release     & Perf        & UX         & Track       │
+│                                                                                                           │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Version Details
 
-### v1.1.0 - Performance, Security & UI Improvements (December 2025)
+### v1.3.0 - Event Management System Rebrand & Guest Tracking (December 2025)
 **Status:** ✅ Current Version
+
+#### Rebranding
+- 🎨 **Nama Aplikasi Baru**
+  - Diubah dari "Guest Registry" menjadi "Event Management System"
+  - Update di semua halaman: Login, Dashboard, TopNav, About, PDF Reports
+
+#### Guest Registration Source Tracking
+- ✨ **Field `registrationSource` Baru**
+  - Tracking sumber registrasi tamu dengan 3 nilai:
+    - `MANUAL` - Tamu ditambahkan via admin panel (default)
+    - `IMPORT` - Tamu diimport dari file Excel
+    - `WALKIN` - Tamu dibuat otomatis dari halaman check-in
+  - Badge oranye "Walk-in" di daftar tamu admin
+  - Warna berbeda per sumber: Oranye (Walk-in), Biru (Import), Abu-abu (Manual)
+
+- 📊 **Export dengan Registration Source**
+  - Export Excel Tamu: kolom `registration_source`
+  - Export Laporan Event: kolom `Sumber Registrasi` dengan label lengkap
+  - Export PDF: kolom `Sumber` dengan warna berbeda per tipe
+
+#### Email Improvements
+- 🎨 **Template Email Baru**
+  - Desain modern dan profesional dengan table-based layout
+  - Header gradient ungu dengan nama event
+  - Kartu tamu dengan warna brand
+  - QR Code dalam box dengan dashed border
+  - Footer yang rapi
+  - Kompatibel dengan semua email client (Outlook, Gmail, dll)
+
+- 🔧 **QR Code Fix**
+  - QR Code dikirim sebagai embedded attachment dengan Content-ID (cid:qrcode)
+  - Tidak lagi menggunakan base64 inline yang diblok banyak email client
+  - QR Code sekarang tampil dengan benar di semua email client
+
+- 🔧 **HTML Template Editor Fix**
+  - Perbaikan warna teks di Textarea (putih dengan background semi-transparan)
+  - Teks sekarang terlihat jelas di dark theme
+
+#### Database Changes
+```sql
+-- New enum
+enum RegistrationSource {
+  MANUAL
+  IMPORT
+  WALKIN
+}
+
+-- Guest model update
++ registrationSource RegistrationSource @default(MANUAL)
+```
+
+#### Technical Changes
+```
+~ App name changed: "Guest Registry" → "Event Management System"
++ RegistrationSource enum in Prisma schema
++ registrationSource field in Guest model
++ SOURCE_CONFIG in frontend for badge styling
++ Walk-in badge in guest list (orange color)
++ formatSource() helper for Excel export
++ formatSourcePdf() helper for PDF export
++ Sumber column in PDF table
++ registration_source column in Excel exports
++ Email template redesign (table-based, modern)
++ QR Code as CID attachment (not base64)
++ generateQRCodeBuffer() for email attachment
++ Textarea component color fix for dark theme
+```
+
+---
+
+### v1.2.0 - Email Integration & UX Improvements (December 2025)
+**Status:** ✅ Previous Stable
+
+#### Email Integration
+- ✨ **Email Column in Guest Data**
+  - Kolom email di form tambah/edit tamu
+  - Import XLSX mendukung kolom email (email, Email, EMAIL, E-mail)
+  - Export XLSX menyertakan kolom email
+  - Export PDF menyertakan kolom Email dalam tabel
+  - Tampilan email dengan icon di halaman daftar tamu
+
+- ✨ **Send Email Button**
+  - Tombol kirim email di action column (icon pesawat)
+  - Hanya muncul jika tamu memiliki alamat email
+  - Link ke Email Settings di halaman pengaturan event
+
+#### User Experience
+- 🔧 **User-Friendly Error Messages**
+  - Fungsi `parseErrorMessage()` untuk translasi error ke bahasa Indonesia
+  - 12+ mapping error messages (Event not found, Invalid credentials, dll)
+  - Implementasi di 11 file frontend untuk konsistensi
+  - Error JSON raw tidak lagi ditampilkan ke user
+
+- 🔧 **NestJS Route Fix**
+  - Perbaikan route conflict `PUT /events/active` vs `PUT /events/:id`
+  - Route spesifik dideklarasikan sebelum route dengan parameter
+  - Mengatasi error "Event not found" saat upload background/logo
+
+#### Technical Changes
+```
++ parseErrorMessage() function in lib/api.ts
++ Email field in Guest create/edit forms
++ Email column in XLSX import/export
++ Email column in PDF export
++ Send Email button in guest list
++ Route ordering fix in events.controller.ts
++ Error handling updates in 11 frontend files:
+  - app/admin/events/page.tsx
+  - app/admin/events/calendar/page.tsx
+  - app/admin/prizes/page.tsx
+  - app/admin/souvenirs/page.tsx
+  - app/admin/guests/new/page.tsx
+  - app/admin/guests/[id]/page.tsx
+  - app/admin/dashboard/page.tsx
+  - app/checkin/page.tsx
+  - app/souvenir/page.tsx
+  - app/show/page.tsx
+  - lib/hooks/use-guests.ts
+```
+
+---
+
+### v1.1.0 - Performance, Security & UI Improvements (December 2025)
+**Status:** ✅ Previous Stable
 
 #### Event Management
 - ✨ **Kanban View untuk Events**
@@ -69,6 +193,15 @@ Dokumen ini mencatat riwayat pengembangan aplikasi dari awal hingga versi terkin
   - Improved health check dengan DB stats
 
 #### New Features
+- ✨ **Email Notification System**
+  - Kirim undangan email ke tamu dengan QR code
+  - Konfigurasi SMTP (Gmail, SendGrid, dll)
+  - Custom email template dengan placeholder
+  - Bulk email sending ke multiple tamu
+  - Email log tracking (sent/failed)
+  - Custom message dari Administrator
+  - Informasi lengkap: nama event, tanggal, waktu, lokasi, QR code
+
 - ✨ **System Monitor Dashboard** (`/admin/system`)
   - Real-time health status (CPU, Memory, DB)
   - Log viewer dengan filter dan search
@@ -441,6 +574,21 @@ Event
 User (standalone)
 ```
 
+### v1.3.0 - Registration Source Tracking
+```sql
++ enum RegistrationSource {
+    MANUAL    -- Guest added via admin panel
+    IMPORT    -- Guest imported from Excel
+    WALKIN    -- Guest auto-created from check-in
+  }
+
+Guest
+├── + registrationSource RegistrationSource @default(MANUAL)
+├── SouvenirTake
+└── PrizeWinner
+    └── PrizeCollection
+```
+
 ---
 
 ## API Evolution
@@ -526,29 +674,59 @@ DELETE /api/auth/users/:id
 + GET    /api/reports/attendance/summary
 ```
 
+### v1.2.0
+```
++ POST   /api/email/send (send email to guest)
++ POST   /api/email/send-bulk (send bulk emails)
++ GET    /api/email/settings
++ PUT    /api/email/settings
++ POST   /api/email/test
++ GET    /api/email/logs
+~ Enhanced error handling with parseErrorMessage()
+~ Email field in guest import/export
+```
+
+### v1.3.0
+```
+~ App name: Guest Registry → Event Management System
++ RegistrationSource enum (MANUAL, IMPORT, WALKIN)
++ registrationSource field in Guest model
++ registration_source column in Excel exports
++ Sumber Registrasi column in full Excel report
++ Sumber column in PDF export
+~ Email template redesign (modern, table-based)
+~ QR Code as CID attachment (better compatibility)
+~ Textarea color fix for dark theme
+```
+
 ---
 
 ## Page Evolution
 
-| Page | v0.1.0 | v0.2.0 | v0.3.0 | v0.4.0 | v1.0.0 | v1.1.0 |
-|------|--------|--------|--------|--------|--------|--------|
-| `/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `/checkin` | - | ✅ | ✅ | ✅ | ✅+ | ✅ |
-| `/show` | - | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `/luckydraw` | - | - | ✅ | ✅ | ✅ | ✅ |
-| `/souvenir` | - | - | - | ✅ | ✅+ | ✅ |
-| `/about` | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅ |
-| `/admin/login` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `/admin/dashboard` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `/admin/guests` | - | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `/admin/statistics` | - | ✅ | ✅ | ✅ | ✅+ | ✅ |
-| `/admin/prizes` | - | - | ✅ | ✅ | ✅ | ✅ |
-| `/admin/souvenirs` | - | - | - | ✅ | ✅ | ✅ |
-| `/admin/system` | - | - | - | - | - | ✅ (new) |
-| `/admin/settings/event` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `/admin/settings/users` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Page | v0.1.0 | v0.2.0 | v0.3.0 | v0.4.0 | v1.0.0 | v1.1.0 | v1.2.0 | v1.3.0 |
+|------|--------|--------|--------|--------|--------|--------|--------|--------|
+| `/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `/checkin` | - | ✅ | ✅ | ✅ | ✅+ | ✅ | ✅+ | ✅ |
+| `/show` | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅ |
+| `/luckydraw` | - | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `/souvenir` | - | - | - | ✅ | ✅+ | ✅ | ✅+ | ✅ |
+| `/about` | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅ | ✅ | ✅~ |
+| `/admin/login` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅~ |
+| `/admin/dashboard` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅ |
+| `/admin/guests` | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅+ |
+| `/admin/guests/new` | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅ |
+| `/admin/guests/[id]` | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅ |
+| `/admin/events` | - | - | - | - | - | ✅ | ✅+ | ✅ |
+| `/admin/events/calendar` | - | - | - | - | - | ✅ | ✅+ | ✅ |
+| `/admin/statistics` | - | ✅ | ✅ | ✅ | ✅+ | ✅ | ✅ | ✅ |
+| `/admin/prizes` | - | - | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅ |
+| `/admin/souvenirs` | - | - | - | ✅ | ✅ | ✅ | ✅+ | ✅ |
+| `/admin/system` | - | - | - | - | - | ✅ | ✅ | ✅ |
+| `/admin/settings/event` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅+ | ✅ |
+| `/admin/settings/email` | - | - | - | - | - | ✅ | ✅ | ✅+ |
+| `/admin/settings/users` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-Legend: ✅ = Available, ✅+ = Enhanced, - = Not available
+Legend: ✅ = Available, ✅+ = Enhanced, ✅~ = Rebranded, - = Not available
 
 ---
 
@@ -561,15 +739,15 @@ Legend: ✅ = Available, ✅+ = Enhanced, - = Not available
 
 ## Future Roadmap (Planned)
 
-### v1.2.0 (Planned)
-- [ ] Email notification untuk pemenang
+### v1.4.0 (Planned)
+- [ ] Email notification untuk pemenang lucky draw
 - [ ] Print badge/ticket
 - [ ] Bulk check-in
 - [ ] Guest self-registration
 - [ ] Multiple event support (parallel events)
 - [ ] Event templates
 
-### v1.3.0 (Planned)
+### v1.5.0 (Planned)
 - [ ] Analytics & reporting dashboard
 - [ ] Data visualization enhancements
 - [ ] Export to multiple formats
@@ -583,4 +761,4 @@ Legend: ✅ = Available, ✅+ = Enhanced, - = Not available
 
 ---
 
-*Changelog - Last Updated: December 2025*
+*Changelog - Last Updated: December 4, 2025 (v1.3.0)*

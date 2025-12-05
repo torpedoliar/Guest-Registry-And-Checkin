@@ -1,7 +1,7 @@
 "use client";
 import RequireAuth from '../../../components/RequireAuth';
 import { useEffect, useState } from 'react';
-import { apiFetch, apiBase } from '../../../lib/api';
+import { apiFetch, apiBase, parseErrorMessage } from '../../../lib/api';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
 import Button from '../../../components/ui/Button';
@@ -41,7 +41,7 @@ export default function PrizesPage() {
             const data = await apiFetch<Prize[]>('/prizes');
             setPrizes(data);
         } catch (e: any) {
-            setError(e.message);
+            setError(parseErrorMessage(e.message));
         } finally {
             setLoading(false);
         }
@@ -72,7 +72,7 @@ export default function PrizesPage() {
             setNewAllowMultipleWins(false);
             load();
         } catch (e: any) {
-            setError(e.message);
+            setError(parseErrorMessage(e.message));
         } finally {
             setCreating(false);
         }
@@ -84,7 +84,7 @@ export default function PrizesPage() {
             await apiFetch(`/prizes/${id}`, { method: 'DELETE' });
             load();
         } catch (e: any) {
-            setError(e.message);
+            setError(parseErrorMessage(e.message));
         }
     };
 
@@ -94,7 +94,7 @@ export default function PrizesPage() {
             await apiFetch(`/prizes/${id}/reset`, { method: 'POST' });
             load();
         } catch (e: any) {
-            setError(e.message);
+            setError(parseErrorMessage(e.message));
         }
     };
 

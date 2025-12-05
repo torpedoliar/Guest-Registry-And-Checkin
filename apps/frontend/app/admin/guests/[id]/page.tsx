@@ -1,7 +1,7 @@
 "use client";
 import RequireAuth from '../../../../components/RequireAuth';
 import { useEffect, useState } from 'react';
-import { apiBase, toApiUrl } from '../../../../lib/api';
+import { apiBase, toApiUrl, parseErrorMessage } from '../../../../lib/api';
 import { useParams, useRouter } from 'next/navigation';
 import WebcamCapture from '../../../../components/WebcamCapture';
 import Card from '../../../../components/ui/Card';
@@ -27,6 +27,7 @@ interface Guest {
   queueNumber: number;
   guestId: string;
   name: string;
+  email?: string | null;
   photoUrl?: string | null;
   tableLocation: string;
   company?: string | null;
@@ -54,7 +55,7 @@ export default function EditGuestPage() {
     const token = localStorage.getItem('token');
     fetch(`${apiBase()}/guests/${id}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       .then(async (r) => setGuest(await r.json()))
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(parseErrorMessage(e.message)));
   }, [id]);
 
   const save = async (e: React.FormEvent) => {
@@ -67,6 +68,7 @@ export default function EditGuestPage() {
       fd.append('guestId', guest!.guestId);
       fd.append('name', guest!.name);
       fd.append('tableLocation', guest!.tableLocation);
+      if (guest!.email) fd.append('email', guest!.email);
       if (guest!.company) fd.append('company', guest!.company);
       if (guest!.department) fd.append('department', guest!.department);
       if (guest!.division) fd.append('division', guest!.division);
@@ -82,7 +84,10 @@ export default function EditGuestPage() {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: fd,
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       setMessage('Perubahan tersimpan.');
       // Optional: navigate back after short delay
       setTimeout(() => router.replace('/admin/guests'), 800);
@@ -142,6 +147,16 @@ export default function EditGuestPage() {
                   id="name"
                   value={guest.name}
                   onChange={(e) => setGuest({ ...guest!, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="mb-1" htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={guest.email || ''}
+                  onChange={(e) => setGuest({ ...guest!, email: e.target.value })}
+                  placeholder="email@example.com"
                 />
               </div>
               <div>

@@ -1,7 +1,7 @@
 "use client";
 import RequireAuth from '../../../components/RequireAuth';
 import { useEffect, useState } from 'react';
-import { apiFetch } from '../../../lib/api';
+import { apiFetch, parseErrorMessage } from '../../../lib/api';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
 import Button from '../../../components/ui/Button';
@@ -55,7 +55,7 @@ export default function SouvenirsPage() {
             const data = await apiFetch<Souvenir[]>('/souvenirs');
             setSouvenirs(data);
         } catch (e: any) {
-            setError(e.message);
+            setError(parseErrorMessage(e.message));
         } finally {
             setLoading(false);
         }
@@ -82,7 +82,7 @@ export default function SouvenirsPage() {
             setNewDesc('');
             load();
         } catch (e: any) {
-            setError(e.message);
+            setError(parseErrorMessage(e.message));
         } finally {
             setCreating(false);
         }
@@ -94,7 +94,7 @@ export default function SouvenirsPage() {
             await apiFetch(`/souvenirs/${id}`, { method: 'DELETE' });
             load();
         } catch (e: any) {
-            setError(e.message);
+            setError(parseErrorMessage(e.message));
         }
     };
 
@@ -104,7 +104,7 @@ export default function SouvenirsPage() {
             await apiFetch(`/souvenirs/${id}/reset`, { method: 'POST' });
             load();
         } catch (e: any) {
-            setError(e.message);
+            setError(parseErrorMessage(e.message));
         }
     };
 
@@ -138,7 +138,7 @@ export default function SouvenirsPage() {
             setEditingId(null);
             load();
         } catch (e: any) {
-            setError(e.message);
+            setError(parseErrorMessage(e.message));
         } finally {
             setSaving(false);
         }

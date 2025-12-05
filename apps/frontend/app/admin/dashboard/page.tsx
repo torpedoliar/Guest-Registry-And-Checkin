@@ -1,7 +1,7 @@
 "use client";
 import RequireAuth from '../../../components/RequireAuth';
 import { useEffect, useState, useMemo, useCallback, lazy, Suspense } from 'react';
-import { apiFetch, apiBase, toApiUrl } from '../../../lib/api';
+import { apiFetch, apiBase, toApiUrl, parseErrorMessage } from '../../../lib/api';
 import { useGuestStats, useActiveEvent, useInvalidateQueries } from '../../../lib/hooks/use-guests';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
@@ -38,6 +38,12 @@ export default function DashboardPage() {
   const [busyPublic, setBusyPublic] = useState(false);
   const [busyAdminCheck, setBusyAdminCheck] = useState(false);
   const [busyAdminUncheck, setBusyAdminUncheck] = useState(false);
+  // Uncheckin modal state
+  const [showUncheckModal, setShowUncheckModal] = useState(false);
+  const [uncheckGuestInfo, setUncheckGuestInfo] = useState<{ id: string; name: string } | null>(null);
+  const [uncheckPassword, setUncheckPassword] = useState('');
+  const [uncheckReason, setUncheckReason] = useState('');
+  const [uncheckError, setUncheckError] = useState<string | null>(null);
   const { addEventListener, removeEventListener, connected } = useSSE();
 
   // Set error from statsError
@@ -150,6 +156,18 @@ export default function DashboardPage() {
               </a>
             </div>
           </div>
+
+          {message && (
+            <div className="text-emerald-300 text-sm bg-emerald-500/10 p-4 rounded-xl border border-emerald-500/20 flex items-center gap-3 animate-fade-in">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+                <CheckCircle size={18} className="text-emerald-400" />
+              </div>
+              {message}
+              <button onClick={() => setMessage(null)} className="ml-auto text-emerald-400 hover:text-emerald-300">
+                <X size={16} />
+              </button>
+            </div>
+          )}
 
           {error && (
             <div className="text-red-300 text-sm bg-red-500/10 p-4 rounded-xl border border-red-500/20 flex items-center gap-3">
@@ -264,7 +282,10 @@ export default function DashboardPage() {
                         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                         body: fd,
                       });
-                      if (!res.ok) throw new Error(await res.text());
+                      if (!res.ok) {
+                        const errorText = await res.text();
+                        throw new Error(parseErrorMessage(errorText));
+                      }
                       setGuestId('');
                       setName('');
                       setTableLocation('');
@@ -383,7 +404,10 @@ export default function DashboardPage() {
                           setError(null); setMessage(null); setBusyPublic(true);
                           try {
                             const res = await fetch(`${apiBase()}/public/guests/checkin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guestId: publicGuestId }) });
-                            if (!res.ok) throw new Error(await res.text());
+                            if (!res.ok) {
+                              const errorText = await res.text();
+                              throw new Error(parseErrorMessage(errorText));
+                            }
                             setMessage('Check-in publik berhasil.');
                             setPublicGuestId('');
                           } catch (e: any) { setError(e.message || 'Gagal check-in publik'); } finally { setBusyPublic(false); }
@@ -410,7 +434,10 @@ export default function DashboardPage() {
                           setError(null); setMessage(null); setBusyAdminCheck(true);
                           try {
                             const r = await fetch(`${apiBase()}/public/guests/search?guestId=${encodeURIComponent(adminGuestId)}`);
-                            if (!r.ok) throw new Error(await r.text());
+                            if (!r.ok) {
+                              const errorText = await r.text();
+                              throw new Error(parseErrorMessage(errorText));
+                            }
                             const arr = await r.json();
                             const g = arr && arr[0];
                             if (!g) throw new Error('Guest tidak ditemukan');
@@ -441,12 +468,16 @@ export default function DashboardPage() {
                           setError(null); setMessage(null); setBusyAdminUncheck(true);
                           try {
                             const r = await fetch(`${apiBase()}/public/guests/search?guestId=${encodeURIComponent(adminGuestId)}`);
-                            if (!r.ok) throw new Error(await r.text());
+                            if (!r.ok) {
+                              const errorText = await r.text();
+                              throw new Error(parseErrorMessage(errorText));
+                            }
                             const arr = await r.json(); const g = arr && arr[0];
                             if (!g) throw new Error('Guest tidak ditemukan');
-                            await apiFetch(`/guests/${g.id}/uncheckin`, { method: 'POST' });
-                            setMessage(`Uncheck-in admin berhasil untuk ${g.name}`);
-                          } catch (e: any) { setError(e.message || 'Gagal uncheck-in admin'); } finally { setBusyAdminUncheck(false); }
+                            // Show modal for password and reason
+                            setUncheckGuestInfo({ id: g.id, name: g.name });
+                            setShowUncheckModal(true);
+                          } catch (e: any) { setError(e.message || 'Gagal mencari guest'); } finally { setBusyAdminUncheck(false); }
                         }}
                       >
                         {busyAdminUncheck ? <Loader2 className="animate-spin" size={16} /> : <XCircle size={16} />}
@@ -459,6 +490,84 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Uncheckin Modal */}
+        {showUncheckModal && uncheckGuestInfo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => { setShowUncheckModal(false); setUncheckPassword(''); setUncheckReason(''); setUncheckError(null); setUncheckGuestInfo(null); }}>
+            <div className="w-full max-w-md rounded-xl bg-slate-900 border border-white/20 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="mb-4 text-lg font-bold text-white flex items-center gap-2">
+                <XCircle size={20} className="text-red-400" />
+                Batalkan Check-in: {uncheckGuestInfo.name}
+              </h3>
+              <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <p className="text-sm text-amber-300">
+                  Tindakan ini memerlukan password admin dan alasan pembatalan.
+                </p>
+              </div>
+              {uncheckError && (
+                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
+                  <XCircle size={16} className="text-red-400 shrink-0" />
+                  <p className="text-sm text-red-300">{uncheckError}</p>
+                </div>
+              )}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-white/70 mb-2">Password Admin</label>
+                  <Input
+                    type="password"
+                    placeholder="Masukkan password Anda"
+                    value={uncheckPassword}
+                    onChange={(e) => { setUncheckPassword(e.target.value); setUncheckError(null); }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-white/70 mb-2">Alasan Pembatalan (minimal 5 karakter)</label>
+                  <Input
+                    placeholder="Contoh: Tamu salah scan, koreksi data..."
+                    value={uncheckReason}
+                    onChange={(e) => setUncheckReason(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <Button
+                  variant="ghost"
+                  onClick={() => { setShowUncheckModal(false); setUncheckPassword(''); setUncheckReason(''); setUncheckError(null); setUncheckGuestInfo(null); }}
+                  className="flex-1"
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={!uncheckPassword || uncheckReason.length < 5 || busyAdminUncheck}
+                  onClick={async () => {
+                    setUncheckError(null); setBusyAdminUncheck(true);
+                    try {
+                      await apiFetch(`/guests/${uncheckGuestInfo.id}/uncheckin`, {
+                        method: 'POST',
+                        body: JSON.stringify({ password: uncheckPassword, reason: uncheckReason }),
+                      });
+                      setMessage(`Uncheck-in berhasil untuk ${uncheckGuestInfo.name}`);
+                      setShowUncheckModal(false);
+                      setUncheckPassword('');
+                      setUncheckReason('');
+                      setUncheckError(null);
+                      setUncheckGuestInfo(null);
+                      setAdminGuestId('');
+                    } catch (e: any) { 
+                      const errorMsg = parseErrorMessage(e.message) || 'Gagal uncheck-in';
+                      setUncheckError(errorMsg);
+                    } finally { setBusyAdminUncheck(false); }
+                  }}
+                  className="flex-1"
+                >
+                  {busyAdminUncheck ? <Loader2 className="animate-spin" size={16} /> : <XCircle size={16} />}
+                  <span className="ml-2">Konfirmasi Uncheck-in</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </RequireAuth>
   );
@@ -518,4 +627,4 @@ function StatsCard({
   );
 }
 
-import { Users, UserPlus, ExternalLink, Monitor, Activity, CheckCircle, XCircle, Loader2, Camera, Save, Clock, Gift, BarChart3, Package, Dices, User } from 'lucide-react';
+import { Users, UserPlus, ExternalLink, Monitor, Activity, CheckCircle, XCircle, Loader2, Camera, Save, Clock, Gift, BarChart3, Package, Dices, User, X } from 'lucide-react';

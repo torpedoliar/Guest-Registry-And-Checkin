@@ -39,6 +39,8 @@ model Event {
   enableLuckyDraw       Boolean              @default(false)
   enableSouvenir        Boolean              @default(false)
   allowDuplicateGuestId Boolean              @default(false)
+  allowMultipleCheckin  Boolean              @default(false)
+  maxCheckinCount       Int                  @default(1)
   customCategories      Json?                // Array of {value: string, label: string, color: string}
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
@@ -57,11 +59,19 @@ enum GuestCategory {
   ORGANIZER
 }
 
+enum RegistrationSource {
+  MANUAL
+  IMPORT
+  WALKIN
+}
+
 model Guest {
   id              String        @id @default(uuid())
   queueNumber     Int
   guestId         String
   name            String
+  email           String?
+  phone           String?
   photoUrl        String?
   tableLocation   String
   company         String?
@@ -69,13 +79,19 @@ model Guest {
   division        String?
   notes           String?
   category        GuestCategory @default(REGULAR)
+  registrationSource RegistrationSource @default(MANUAL)
   checkedIn       Boolean       @default(false)
   checkedInAt     DateTime?
   checkedInById   String?
   checkedInByName String?
+  checkinCount    Int           @default(0)
   souvenirTaken   Boolean       @default(false)
+  emailSent       Boolean       @default(false)
+  emailSentAt     DateTime?
   prizeWins       PrizeWinner[]
   souvenirTakes   SouvenirTake[]
+  emailLogs       EmailLog[]
+  checkins        GuestCheckin[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   eventId         String
@@ -89,6 +105,20 @@ model Guest {
   @@index([name])
   @@index([company])
   @@index([queueNumber])
+}
+
+// Track multiple check-ins per guest from different admins/counters
+model GuestCheckin {
+  id            String   @id @default(uuid())
+  guestId       String
+  guest         Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  checkinAt     DateTime @default(now())
+  checkinById   String?
+  checkinByName String?
+  counterName   String?  // Optional: name of the counter/station
+
+  @@index([guestId])
+  @@index([checkinById])
 }
 
 model Prize {
@@ -170,4 +200,40 @@ model PrizeCollection {
   collectedAt   DateTime @default(now())
   collectedById String?
   collectedByName String?
+}
+
+// Email settings for SMTP configuration
+model EmailSettings {
+  id              String   @id @default(uuid())
+  smtpHost        String
+  smtpPort        Int      @default(587)
+  smtpSecure      Boolean  @default(false)
+  smtpUser        String
+  smtpPass        String   // encrypted
+  senderName      String
+  senderEmail     String
+  emailSubject    String   @default("Undangan Event")
+  emailTemplate   String?  @db.Text // HTML template with placeholders
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Track sent emails
+model EmailLog {
+  id          String   @id @default(uuid())
+  guestId     String
+  guest       Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  eventId     String
+  recipient   String
+  subject     String
+  status      String   // sent, failed, pending
+  errorMessage String?
+  sentAt      DateTime @default(now())
+  sentById    String?
+  sentByName  String?
+
+  @@index([guestId])
+  @@index([eventId])
+  @@index([status])
 }

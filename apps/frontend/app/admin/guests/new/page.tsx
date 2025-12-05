@@ -1,7 +1,7 @@
 "use client";
 import RequireAuth from '../../../../components/RequireAuth';
 import { useState } from 'react';
-import { apiBase, apiFetch } from '../../../../lib/api';
+import { apiBase, apiFetch, parseErrorMessage } from '../../../../lib/api';
 import { useRouter } from 'next/navigation';
 import WebcamCapture from '../../../../components/WebcamCapture';
 import Card from '../../../../components/ui/Card';
@@ -27,6 +27,7 @@ const CATEGORY_OPTIONS: { value: GuestCategory; label: string; color: string }[]
 export default function NewGuestPage() {
   const [guestId, setGuestId] = useState('');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [tableLocation, setTableLocation] = useState('');
   const [company, setCompany] = useState('');
   const [department, setDepartment] = useState('');
@@ -51,6 +52,7 @@ export default function NewGuestPage() {
       fd.append('guestId', guestId);
       fd.append('name', name);
       fd.append('tableLocation', tableLocation);
+      if (email) fd.append('email', email);
       if (company) fd.append('company', company);
       if (department) fd.append('department', department);
       if (division) fd.append('division', division);
@@ -63,7 +65,10 @@ export default function NewGuestPage() {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: fd,
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
       await res.json();
       setMessage('Tamu berhasil dibuat.');
       setTimeout(() => router.replace('/admin/guests'), 500);
@@ -115,14 +120,23 @@ export default function NewGuestPage() {
                     required
                   />
                 </div>
+                <div className="md:col-span-2">
+                  <Label className="mb-2" htmlFor="email">Email (Opsional)</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="email@example.com"
+                  />
+                </div>
                 <div>
-                  <Label className="mb-2" htmlFor="tableLocation">Meja / Ruangan</Label>
+                  <Label className="mb-2" htmlFor="tableLocation">Meja / Ruangan (Opsional)</Label>
                   <Input
                     id="tableLocation"
                     value={tableLocation}
                     onChange={(e) => setTableLocation(e.target.value)}
-                    placeholder="Lokasi..."
-                    required
+                    placeholder="Opsional..."
                   />
                 </div>
                 <div>
