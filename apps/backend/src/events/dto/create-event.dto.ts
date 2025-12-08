@@ -10,5 +10,9 @@ export class CreateEventDto {
 
   @IsOptional()
   @IsString()
+  time?: string;
+
+  @IsOptional()
+  @IsString()
   location?: string;
 }

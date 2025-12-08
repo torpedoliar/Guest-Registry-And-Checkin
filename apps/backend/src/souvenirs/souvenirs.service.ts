@@ -104,6 +104,53 @@ export class SouvenirsService {
     }
 
     async giveSouvenir(guestId: string, souvenirId: string, takenById?: string, takenByName?: string) {
+        // Check event settings for check-in requirement
+        const activeEvent = await this.events.getActive();
+        const requireCheckin = activeEvent?.requireCheckinForSouvenir ?? true;
+
+        // Get guest with souvenir takes and prize wins for detailed info
+        const guest = await this.prisma.guest.findUnique({
+            where: { id: guestId },
+            include: {
+                souvenirTakes: {
+                    include: { souvenir: true },
+                    orderBy: { takenAt: 'desc' }
+                },
+                prizeWins: {
+                    include: { collection: true }
+                }
+            }
+        });
+        if (!guest) throw new BadRequestException('Tamu tidak ditemukan');
+
+        // Check if guest has uncollected prizes
+        const hasUncollectedPrizes = guest.prizeWins.some(pw => !pw.collection);
+
+        // If guest has prizes, don't require check-in (they need to collect prizes first)
+        // If guest only has souvenir, auto check-in if not checked in yet
+        if (requireCheckin && !guest.checkedIn && !hasUncollectedPrizes) {
+            // Auto check-in for souvenir-only guests
+            await this.prisma.guest.update({
+                where: { id: guestId },
+                data: { 
+                    checkedIn: true, 
+                    checkedInAt: new Date(),
+                    checkedInById: takenById,
+                    checkedInByName: takenByName,
+                    checkinCount: { increment: 1 }
+                }
+            });
+            // Also create check-in record
+            await this.prisma.guestCheckin.create({
+                data: {
+                    guestId,
+                    checkinById: takenById,
+                    checkinByName: takenByName,
+                    counterName: 'Souvenir Counter'
+                }
+            });
+        }
+
         // Check if souvenir exists and has stock
         const souvenir = await this.prisma.souvenir.findUnique({
             where: { id: souvenirId },
@@ -119,7 +166,16 @@ export class SouvenirsService {
             where: { guestId_souvenirId: { guestId, souvenirId } }
         });
         if (existing) {
-            throw new BadRequestException('Tamu sudah mengambil souvenir ini');
+            // Return existing takes info for the popup
+            throw new BadRequestException({
+                message: 'Tamu sudah mengambil souvenir ini',
+                alreadyTaken: true,
+                previousTakes: guest.souvenirTakes.map(t => ({
+                    souvenirName: t.souvenir.name,
+                    takenAt: t.takenAt,
+                    takenByName: t.takenByName
+                }))
+            });
         }
 
         // Create souvenir take record

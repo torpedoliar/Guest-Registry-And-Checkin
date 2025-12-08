@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { apiBase, toApiUrl, apiFetch, parseErrorMessage } from "../../lib/api";
 import { Html5Qrcode } from "html5-qrcode";
-import { Search, QrCode, Loader2, CheckCircle, Clock, Users, X, Gift, XCircle, Trophy, Package, ChevronDown, ChevronUp, UserPlus, Settings, Radio } from 'lucide-react';
+import { Search, QrCode, Loader2, CheckCircle, Clock, Users, X, Gift, XCircle, Trophy, Package, ChevronDown, ChevronUp, UserPlus, Settings, Radio, UserCheck, AlertTriangle } from 'lucide-react';
 import { useSSE } from "../../lib/sse-context";
 
 type EventConfig = {
@@ -17,6 +17,13 @@ type EventConfig = {
     overlayOpacity: number;
     checkinPopupTimeoutMs?: number;
     autoCreateGuestOnSouvenir?: boolean;
+    requireCheckinForSouvenir?: boolean;
+};
+
+type SouvenirTakeInfo = {
+    souvenirName: string;
+    takenAt: string;
+    takenByName?: string;
 };
 
 type Guest = {
@@ -94,6 +101,9 @@ export default function SouvenirPage() {
     const [autoCreateGuest, setAutoCreateGuest] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [creatingGuest, setCreatingGuest] = useState(false);
+    const [requireCheckinForSouvenir, setRequireCheckinForSouvenir] = useState(true);
+    const [savingSettings, setSavingSettings] = useState(false);
+    const [alreadyTakenInfo, setAlreadyTakenInfo] = useState<{ guest: Guest; takes: SouvenirTakeInfo[] } | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const { addEventListener, removeEventListener, connected } = useSSE();
 
@@ -107,6 +117,10 @@ export default function SouvenirPage() {
                 setAutoCreateGuest(savedAutoCreate === 'true');
             } else if (data.autoCreateGuestOnSouvenir) {
                 setAutoCreateGuest(data.autoCreateGuestOnSouvenir);
+            }
+            // Load requireCheckinForSouvenir from event config
+            if (data.requireCheckinForSouvenir !== undefined) {
+                setRequireCheckinForSouvenir(data.requireCheckinForSouvenir);
             }
         });
         loadSouvenirs();
@@ -193,6 +207,30 @@ export default function SouvenirPage() {
         }
     };
 
+    // Load guest prizes and return the data (for checking before auto-give souvenir)
+    const loadGuestPrizesAndReturn = async (guestId: string): Promise<PrizeWin[] | null> => {
+        setLoadingPrizes(true);
+        setPrizeWins([]);
+        try {
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            if (!token) return null;
+            const res = await fetch(`${apiBase()}/souvenirs/prizes/guest/${guestId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPrizeWins(data);
+                return data;
+            }
+            return null;
+        } catch (e) {
+            console.error('Failed to load prizes', e);
+            return null;
+        } finally {
+            setLoadingPrizes(false);
+        }
+    };
+
     const effectiveOverlay = overlayOverride ?? preview?.overlayOpacity ?? cfg?.overlayOpacity ?? 0.5;
     const overlayStyle = useMemo(() => ({
         backgroundColor: `rgba(0,0,0,${effectiveOverlay})`,
@@ -269,17 +307,26 @@ export default function SouvenirPage() {
             setResults(data);
 
             if (data.length > 0) {
-                // If exact match or single result, auto-give souvenir
+                // If exact match or single result
                 if (data.length === 1) {
                     const guest = data[0];
                     setSelected(guest);
-                    loadGuestPrizes(guest.id);
                     
-                    // Auto-give souvenir if selectedSouvenir is set and guest hasn't taken it
-                    if (selectedSouvenir && !guest.souvenirTaken) {
+                    // Load prize wins first to check if guest has uncollected prizes
+                    const prizeData = await loadGuestPrizesAndReturn(guest.id);
+                    const hasUncollectedPrizes = prizeData && prizeData.some((pw: any) => !pw.collection);
+                    
+                    // Only auto-give souvenir if:
+                    // 1. selectedSouvenir is set
+                    // 2. guest hasn't taken souvenir yet
+                    // 3. guest has NO uncollected prizes (if has prizes, let them choose first)
+                    if (selectedSouvenir && !guest.souvenirTaken && !hasUncollectedPrizes) {
                         await giveSouvenir(guest, selectedSouvenir);
                         setQ('');
                         setTimeout(() => inputRef.current?.focus(), 100);
+                    } else if (hasUncollectedPrizes) {
+                        // Guest has prizes - show message and let them collect prizes first
+                        setError('Tamu ini memiliki hadiah yang belum diambil. Silakan ambil hadiah terlebih dahulu.');
                     }
                 }
                 // If multiple results, let user choose manually
@@ -357,6 +404,11 @@ export default function SouvenirPage() {
 
             if (!res.ok) {
                 const err = await res.json();
+                // Check if this is an "already taken" error with previous takes info
+                if (err.alreadyTaken && err.previousTakes) {
+                    setAlreadyTakenInfo({ guest: g, takes: err.previousTakes });
+                    return;
+                }
                 throw new Error(err.message || 'Gagal memberikan souvenir');
             }
 
@@ -467,13 +519,19 @@ export default function SouvenirPage() {
                 const guest = data[0] as Guest;
                 setResults([guest]);
                 setSelected(guest);
-                loadGuestPrizes(guest.id);
                 
-                // Auto-give souvenir if selectedSouvenir is set and guest hasn't taken it
-                if (selectedSouvenir && !guest.souvenirTaken) {
+                // Load prize wins first to check if guest has uncollected prizes
+                const prizeData = await loadGuestPrizesAndReturn(guest.id);
+                const hasUncollectedPrizes = prizeData && prizeData.some((pw: any) => !pw.collection);
+                
+                // Only auto-give souvenir if guest has NO uncollected prizes
+                if (selectedSouvenir && !guest.souvenirTaken && !hasUncollectedPrizes) {
                     await giveSouvenir(guest, selectedSouvenir);
                     setQ('');
                     setTimeout(() => inputRef.current?.focus(), 100);
+                } else if (hasUncollectedPrizes) {
+                    // Guest has prizes - show message
+                    setError('Tamu ini memiliki hadiah yang belum diambil. Silakan ambil hadiah terlebih dahulu.');
                 }
             } else if (data && data.length > 1) {
                 // Multiple results - show list for manual selection
@@ -632,6 +690,46 @@ export default function SouvenirPage() {
                         </div>
 
                         <div className="space-y-4">
+                            {/* Require Check-in Toggle - Event Level Setting */}
+                            <label className="flex items-center justify-between p-4 rounded-lg border border-purple-500/30 bg-purple-500/10 cursor-pointer hover:bg-purple-500/20 transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <UserCheck size={20} className="text-purple-400" />
+                                    <div>
+                                        <div className="font-medium text-white">Wajib Check-in Dulu</div>
+                                        <div className="text-sm text-white/60">Tamu harus check-in sebelum bisa mengambil souvenir/konsumsi</div>
+                                    </div>
+                                </div>
+                                <div className={`w-12 h-7 rounded-full transition-colors relative ${requireCheckinForSouvenir ? 'bg-purple-500' : 'bg-white/20'}`}>
+                                    <div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${requireCheckinForSouvenir ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    <input
+                                        type="checkbox"
+                                        className="hidden"
+                                        checked={requireCheckinForSouvenir}
+                                        onChange={async (e) => {
+                                            const checked = e.target.checked;
+                                            setRequireCheckinForSouvenir(checked);
+                                            // Save to backend
+                                            setSavingSettings(true);
+                                            try {
+                                                const token = localStorage.getItem('token');
+                                                await fetch(`${apiBase()}/config/event`, {
+                                                    method: 'PATCH',
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                                                    },
+                                                    body: JSON.stringify({ requireCheckinForSouvenir: checked })
+                                                });
+                                            } catch (e) {
+                                                console.error('Failed to save setting', e);
+                                            } finally {
+                                                setSavingSettings(false);
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            </label>
+
                             <label className="flex items-center justify-between p-4 rounded-lg border border-white/20 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors">
                                 <div className="flex items-center gap-3">
                                     <UserPlus size={20} className="text-purple-400" />
@@ -659,10 +757,11 @@ export default function SouvenirPage() {
                         <div className="mt-6 flex gap-3">
                             <button
                                 onClick={() => setShowSettings(false)}
-                                className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 font-medium text-white hover:bg-purple-700 transition-colors"
+                                disabled={savingSettings}
+                                className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 font-medium text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
                             >
-                                <CheckCircle size={18} />
-                                Selesai
+                                {savingSettings ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle size={18} />}
+                                {savingSettings ? 'Menyimpan...' : 'Selesai'}
                             </button>
                         </div>
                     </div>
@@ -997,6 +1096,77 @@ export default function SouvenirPage() {
                     </div>
                 )
             }
+
+            {/* Already Taken Popup - Shows when souvenir was already given */}
+            {alreadyTakenInfo && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-lg rounded-xl border border-amber-500/30 bg-slate-900/95 text-white shadow-glass p-6 animate-in fade-in zoom-in duration-300">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-xl font-bold flex items-center gap-2 text-amber-400">
+                                <AlertTriangle size={24} />
+                                Souvenir Sudah Diambil
+                            </h3>
+                            <button
+                                onClick={() => setAlreadyTakenInfo(null)}
+                                className="text-white/60 hover:text-white"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="mb-4 p-4 rounded-lg border border-white/20 bg-white/5">
+                            <div className="text-sm text-white/60 mb-1">Tamu</div>
+                            <div className="text-xl font-bold text-white">{alreadyTakenInfo.guest.name}</div>
+                            <div className="text-sm text-white/60 font-mono">{alreadyTakenInfo.guest.guestId}</div>
+                        </div>
+
+                        <div className="mb-4">
+                            <div className="text-sm text-amber-400 font-medium mb-2 flex items-center gap-2">
+                                <Package size={16} />
+                                Riwayat Pengambilan Souvenir:
+                            </div>
+                            <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                                {alreadyTakenInfo.takes.map((take, idx) => (
+                                    <div key={idx} className="p-3 rounded-lg border border-amber-500/20 bg-amber-500/10">
+                                        <div className="font-semibold text-white flex items-center gap-2">
+                                            <Gift size={16} className="text-amber-400" />
+                                            {take.souvenirName}
+                                        </div>
+                                        <div className="text-sm text-white/70 mt-1 flex items-center gap-4">
+                                            <span className="flex items-center gap-1">
+                                                <Clock size={12} />
+                                                {new Date(take.takenAt).toLocaleString('id-ID', {
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </span>
+                                            {take.takenByName && (
+                                                <span className="flex items-center gap-1">
+                                                    <Users size={12} />
+                                                    Admin: {take.takenByName}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setAlreadyTakenInfo(null)}
+                                className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-3 font-medium text-white hover:bg-amber-700 transition-colors"
+                            >
+                                <CheckCircle size={18} />
+                                Mengerti
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Scanner Modal */}
             {

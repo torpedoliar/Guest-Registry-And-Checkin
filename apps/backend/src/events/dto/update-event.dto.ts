@@ -18,6 +18,11 @@ export class UpdateEventDto {
   date?: string | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.time !== null)
+  @IsString()
+  time?: string | null;
+
+  @IsOptional()
   @ValidateIf((o) => o.location !== null)
   @IsString()
   location?: string | null;
@@ -68,6 +73,24 @@ export class UpdateEventDto {
   @IsOptional()
   @IsBoolean()
   allowDuplicateGuestId?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowMultipleCheckin?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  maxCheckinCount?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  allowMultipleCheckinPerCounter?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  requireCheckinForSouvenir?: boolean;
 
   @IsOptional()
   @IsArray()

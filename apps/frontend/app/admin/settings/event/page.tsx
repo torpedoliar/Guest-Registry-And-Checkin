@@ -40,6 +40,7 @@ interface EventConfig {
   id: string;
   name: string;
   date?: string | null;
+  time?: string | null;
   location?: string | null;
   logoUrl?: string | null;
   backgroundType: 'NONE' | 'IMAGE' | 'VIDEO';
@@ -51,6 +52,7 @@ interface EventConfig {
   enableLuckyDraw: boolean;
   enableSouvenir: boolean;
   allowDuplicateGuestId: boolean;
+  allowMultipleCheckinPerCounter?: boolean;
   customCategories?: CustomCategory[];
 }
 
@@ -122,6 +124,7 @@ export default function EventSettingsPage() {
             enableLuckyDraw: false,
             enableSouvenir: false,
             allowDuplicateGuestId: false,
+            allowMultipleCheckinPerCounter: false,
             checkinPopupTimeoutMs: 5000
           });
           return;
@@ -188,6 +191,7 @@ export default function EventSettingsPage() {
         body: JSON.stringify({
           name: cfg.name,
           date: cfg.date || null,
+          time: cfg.time || null,
           location: cfg.location || null,
           backgroundType: cfg.backgroundType,
           backgroundImageUrl: cfg.backgroundType === 'IMAGE' ? (cfg.backgroundImageUrl || null) : null,
@@ -196,6 +200,7 @@ export default function EventSettingsPage() {
           checkinPopupTimeoutMs: cfg.checkinPopupTimeoutMs ?? 5000,
           enablePhotoCapture: cfg.enablePhotoCapture ?? false,
           allowDuplicateGuestId: cfg.allowDuplicateGuestId ?? false,
+          allowMultipleCheckinPerCounter: cfg.allowMultipleCheckinPerCounter ?? false,
           customCategories: cfg.customCategories || null,
         })
       });
@@ -368,17 +373,29 @@ export default function EventSettingsPage() {
                   className="text-lg"
                 />
               </div>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                 <div>
                   <Label className="mb-2 flex items-center gap-2" htmlFor="event-date">
                     <Calendar size={16} className="text-white/50" />
-                    Date
+                    Tanggal
                   </Label>
                   <Input
                     id="event-date"
                     type="date"
                     value={cfg.date?.slice(0, 10) || ''}
                     onChange={(e) => setCfg({ ...cfg, date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-2 flex items-center gap-2" htmlFor="event-time">
+                    <Clock size={16} className="text-white/50" />
+                    Jam
+                  </Label>
+                  <Input
+                    id="event-time"
+                    type="time"
+                    value={cfg.time || ''}
+                    onChange={(e) => setCfg({ ...cfg, time: e.target.value })}
                   />
                 </div>
                 <div>
@@ -471,6 +488,25 @@ export default function EventSettingsPage() {
                       className="hidden"
                       checked={cfg.allowDuplicateGuestId}
                       onChange={(e) => setCfg({ ...cfg, allowDuplicateGuestId: e.target.checked })}
+                    />
+                  </div>
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <UserCheck size={20} className="text-blue-400" />
+                    <div>
+                      <div className="font-medium text-white">Multiple Check-in Per Counter</div>
+                      <div className="text-sm text-white/60">Tamu dapat check-in di berbagai admin/counter (maksimal 1x per counter)</div>
+                    </div>
+                  </div>
+                  <div className={`w-12 h-7 rounded-full transition-colors relative ${cfg.allowMultipleCheckinPerCounter ? 'bg-blue-500' : 'bg-white/20'}`}>
+                    <div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${cfg.allowMultipleCheckinPerCounter ? 'translate-x-5' : 'translate-x-0'}`} />
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={cfg.allowMultipleCheckinPerCounter ?? false}
+                      onChange={(e) => setCfg({ ...cfg, allowMultipleCheckinPerCounter: e.target.checked })}
                     />
                   </div>
                 </label>
@@ -755,5 +791,5 @@ export default function EventSettingsPage() {
   );
 }
 
-import { Type, Calendar, MapPin, Settings2, Image as ImageIcon, Monitor, Upload, Loader2, EyeOff, Save, Trash2, AlertTriangle, Gift, Dices, Package, UserCog, Trophy, ChevronRight, Camera, Users, Tag, X, Plus, Mail } from 'lucide-react';
+import { Type, Calendar, Clock, MapPin, Settings2, Image as ImageIcon, Monitor, Upload, Loader2, EyeOff, Save, Trash2, AlertTriangle, Gift, Dices, Package, UserCog, Trophy, ChevronRight, Camera, Users, UserCheck, Tag, X, Plus, Mail } from 'lucide-react';
 import Link from 'next/link';

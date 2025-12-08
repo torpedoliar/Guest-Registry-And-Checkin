@@ -111,7 +111,7 @@ export default function TopNav() {
           </Link>
           <Link className={linkCls('/souvenir')} href="/souvenir">
             <Package size={16} />
-            <span>Souvenir</span>
+            <span>Souvenir / Hadiah</span>
           </Link>
           {/* Settings */}
           <div className="hidden md:block w-px h-6 bg-white/20 mx-1" />

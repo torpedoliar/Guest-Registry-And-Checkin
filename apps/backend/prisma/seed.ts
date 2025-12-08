@@ -4,13 +4,15 @@ import * as bcrypt from 'bcrypt';
 async function main() {
   const prisma = new PrismaClient();
 
-  const password = 'Admin123!';
-  const passwordHash = await bcrypt.hash(password, 10);
+  // Read admin credentials from environment or use defaults
+  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'Admin123!';
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
 
   const admin = await prisma.adminUser.upsert({
-    where: { username: 'admin' },
+    where: { username: adminUsername },
     update: {},
-    create: { username: 'admin', passwordHash },
+    create: { username: adminUsername, passwordHash },
   });
 
   console.log('Seed completed:', { admin: admin.username });

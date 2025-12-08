@@ -20,6 +20,7 @@ interface Event {
   id: string;
   name: string;
   date?: string | null;
+  time?: string | null;
   location?: string | null;
   isActive: boolean;
   createdAt: string;
@@ -40,6 +41,7 @@ export default function EventsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDate, setNewDate] = useState('');
+  const [newTime, setNewTime] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -47,6 +49,7 @@ export default function EventsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
   const [editLocation, setEditLocation] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -104,6 +107,7 @@ export default function EventsPage() {
         body: JSON.stringify({
           name: newName.trim(),
           date: newDate || undefined,
+          time: newTime || undefined,
           location: newLocation.trim() || undefined,
         }),
       });
@@ -114,6 +118,7 @@ export default function EventsPage() {
       setMessage('Event berhasil dibuat');
       setNewName('');
       setNewDate('');
+      setNewTime('');
       setNewLocation('');
       setShowCreate(false);
       await fetchEvents();
@@ -135,6 +140,7 @@ export default function EventsPage() {
         body: JSON.stringify({
           name: editName.trim(),
           date: editDate || undefined,
+          time: editTime || undefined,
           location: editLocation.trim() || undefined,
         }),
       });
@@ -230,6 +236,7 @@ export default function EventsPage() {
     setEditingId(event.id);
     setEditName(event.name);
     setEditDate(event.date?.slice(0, 10) || '');
+    setEditTime(event.time || '');
     setEditLocation(event.location || '');
   };
 
@@ -329,6 +336,12 @@ export default function EventsPage() {
               <Calendar size={10} />
               {formatDate(event.date)}
             </span>
+            {event.time && (
+              <span className="flex items-center gap-1">
+                <Clock size={10} />
+                {event.time}
+              </span>
+            )}
             {event.location && (
               <span className="flex items-center gap-1">
                 <MapPin size={10} />
@@ -547,7 +560,7 @@ export default function EventsPage() {
                   <X size={20} />
                 </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <Label className="mb-2">Nama Event *</Label>
                   <Input
@@ -562,6 +575,14 @@ export default function EventsPage() {
                     type="date"
                     value={newDate}
                     onChange={(e) => setNewDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-2">Jam</Label>
+                  <Input
+                    type="time"
+                    value={newTime}
+                    onChange={(e) => setNewTime(e.target.value)}
                   />
                 </div>
                 <div>
@@ -637,7 +658,7 @@ export default function EventsPage() {
                   {editingId === event.id ? (
                     // Edit Mode
                     <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
                           <Label className="mb-2">Nama Event</Label>
                           <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
@@ -645,6 +666,10 @@ export default function EventsPage() {
                         <div>
                           <Label className="mb-2">Tanggal</Label>
                           <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+                        </div>
+                        <div>
+                          <Label className="mb-2">Jam</Label>
+                          <Input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} />
                         </div>
                         <div>
                           <Label className="mb-2">Lokasi</Label>
@@ -676,6 +701,12 @@ export default function EventsPage() {
                             <Calendar size={14} />
                             {formatDate(event.date)}
                           </span>
+                          {event.time && (
+                            <span className="flex items-center gap-1">
+                              <Clock size={14} />
+                              {event.time} WIB
+                            </span>
+                          )}
                           {event.location && (
                             <span className="flex items-center gap-1">
                               <MapPin size={14} />

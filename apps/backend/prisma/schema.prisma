@@ -27,6 +27,7 @@ model Event {
   id                    String               @id @default(uuid())
   name                  String
   date                  DateTime?
+  time                  String?              // Event time in format "HH:mm", e.g. "09:00"
   location              String?
   logoUrl               String?
   backgroundType        EventBackgroundType  @default(NONE)
@@ -41,6 +42,8 @@ model Event {
   allowDuplicateGuestId Boolean              @default(false)
   allowMultipleCheckin  Boolean              @default(false)
   maxCheckinCount       Int                  @default(1)
+  allowMultipleCheckinPerCounter Boolean     @default(false) // Allow 1 check-in per admin/counter
+  requireCheckinForSouvenir Boolean         @default(true)  // Require check-in before taking souvenir/consumption
   customCategories      Json?                // Array of {value: string, label: string, color: string}
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt

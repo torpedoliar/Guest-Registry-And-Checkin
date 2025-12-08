@@ -1,15 +1,13 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:14-alpine
-    container_name: guest-db-dev
+    container_name: guest-db-dev-https
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
       POSTGRES_DB: ${DB_NAME:-guest_registry}
     volumes:
-      - postgres_data_dev:/var/lib/postgresql/data
+      - postgres_data_dev_https:/var/lib/postgresql/data
     ports:
       - "${DB_PORT:-5432}:5432"
     healthcheck:
@@ -18,13 +16,13 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - guest-network-dev
+      - guest-network-dev-https
 
   backend:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile.dev
-    container_name: guest-backend-dev
+    container_name: guest-backend-dev-https
     command: sh -c "npx prisma generate && npx prisma db push --accept-data-loss && npm run seed && npm run dev"
     depends_on:
       postgres:
@@ -35,13 +33,15 @@ services:
       JWT_SECRET: ${JWT_SECRET:-super-secret-key-change-this}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
       NODE_ENV: development
+      # Backend runs HTTP internally - HTTPS handled by frontend or reverse proxy
+      USE_HTTPS: "false"
     ports:
       - "${BACKEND_PORT:-4000}:${BACKEND_PORT:-4000}"
     volumes:
       - ./apps/backend:/app
       - /app/node_modules
     networks:
-      - guest-network-dev
+      - guest-network-dev-https
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://127.0.0.1:${BACKEND_PORT:-4000}/api/health || exit 1" ]
       interval: 5s
@@ -52,30 +52,37 @@ services:
     build:
       context: ./apps/frontend
       dockerfile: Dockerfile
-    container_name: guest-frontend-dev
-    command: npm run dev
+    container_name: guest-frontend-dev-https
+    command: node server.js
     depends_on:
       backend:
         condition: service_healthy
     environment:
+      # Internal proxy uses HTTP to backend (no SSL issues)
       BACKEND_ORIGIN: http://backend:${BACKEND_PORT:-4000}
       BACKEND_PORT: ${BACKEND_PORT:-4000}
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:${BACKEND_PORT:-4000}/api
+      # Client-side API calls go through frontend proxy
+      NEXT_PUBLIC_API_BASE_URL: /api
       NODE_ENV: development
       IS_DOCKER: "true"
+      # HTTPS Configuration for frontend server
+      USE_HTTPS: "true"
+      SSL_KEY_PATH: /app/certs/server.key
+      SSL_CERT_PATH: /app/certs/server.crt
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     volumes:
       - ./apps/frontend:/app
+      - ./certs:/app/certs:ro
       - /app/node_modules
       - /app/.next
     networks:
-      - guest-network-dev
+      - guest-network-dev-https
 
 volumes:
-  postgres_data_dev:
+  postgres_data_dev_https:
 
 
 networks:
-  guest-network-dev:
+  guest-network-dev-https:
     driver: bridge

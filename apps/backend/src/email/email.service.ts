@@ -42,7 +42,20 @@ export class EmailService {
       // Mask password for security
       return { ...settings, smtpPass: '********' };
     }
-    return null;
+    // Return empty object instead of null to prevent JSON parse error
+    return {
+      id: null,
+      smtpHost: '',
+      smtpPort: 587,
+      smtpSecure: false,
+      smtpUser: '',
+      smtpPass: '',
+      senderName: '',
+      senderEmail: '',
+      emailSubject: 'Undangan Event',
+      emailTemplate: null,
+      isActive: false,
+    };
   }
 
   // Get raw settings (with password) for internal use
@@ -54,22 +67,35 @@ export class EmailService {
 
   // Save email settings
   async saveSettings(dto: EmailSettingsDto) {
-    // Deactivate existing settings
-    await this.prisma.emailSettings.updateMany({
+    // Get existing settings
+    const existing = await this.prisma.emailSettings.findFirst({
       where: { isActive: true },
-      data: { isActive: false },
     });
 
-    // Create or update settings
-    const existing = await this.prisma.emailSettings.findFirst();
+    // If password is empty/masked and settings exist, keep the old password
+    let passwordToSave = dto.smtpPass;
+    if (existing && (!dto.smtpPass || dto.smtpPass === '********' || dto.smtpPass === '')) {
+      passwordToSave = existing.smtpPass;
+    }
+
+    // Prepare data without password, then add it
+    const { smtpPass, ...restDto } = dto;
+    const dataToSave = { ...restDto, smtpPass: passwordToSave, isActive: true };
+
     if (existing) {
       return this.prisma.emailSettings.update({
         where: { id: existing.id },
-        data: { ...dto, isActive: true },
+        data: dataToSave,
       });
     }
+
+    // For new settings, password is required
+    if (!passwordToSave) {
+      throw new BadRequestException('SMTP password is required for new configuration');
+    }
+
     return this.prisma.emailSettings.create({
-      data: { ...dto, isActive: true },
+      data: dataToSave,
     });
   }
 
@@ -127,14 +153,10 @@ export class EmailService {
     });
   }
 
-  // Format time for email
-  private formatTime(date: Date | null): string {
-    if (!date) return '-';
-    return new Date(date).toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Jakarta',
-    });
+  // Format time for email (uses event.time string field)
+  private formatEventTime(time: string | null | undefined): string {
+    if (!time) return '-';
+    return `${time} WIB`;
   }
 
   // Build email HTML content (uses cid:qrcode for embedded image)
@@ -155,7 +177,7 @@ export class EmailService {
         .replace(/\{\{guest_id\}\}/g, guest.guestId)
         .replace(/\{\{event_name\}\}/g, event.name)
         .replace(/\{\{event_date\}\}/g, this.formatDate(event.date))
-        .replace(/\{\{event_time\}\}/g, this.formatTime(event.date))
+        .replace(/\{\{event_time\}\}/g, this.formatEventTime(event.time))
         .replace(/\{\{event_location\}\}/g, event.location || '-')
         .replace(/\{\{table_location\}\}/g, guest.tableLocation || '-')
         .replace(/\{\{custom_message\}\}/g, customMessage || '')
@@ -228,7 +250,7 @@ export class EmailService {
                       </tr>
                       <tr>
                         <td style="padding:8px 0;color:#666666;font-size:14px;border-top:1px solid #e8eaff;">Waktu</td>
-                        <td style="padding:8px 0;color:#333333;font-size:14px;font-weight:600;border-top:1px solid #e8eaff;">${this.formatTime(event.date)} WIB</td>
+                        <td style="padding:8px 0;color:#333333;font-size:14px;font-weight:600;border-top:1px solid #e8eaff;">${this.formatEventTime(event.time)}</td>
                       </tr>
                       <tr>
                         <td style="padding:8px 0;color:#666666;font-size:14px;border-top:1px solid #e8eaff;">Lokasi</td>

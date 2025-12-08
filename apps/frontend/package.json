@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:https": "set USE_HTTPS=true && node server.js",
     "build": "next build",
-    "start": "next start -p 3000"
+    "start": "next start -p 3000",
+    "start:https": "set USE_HTTPS=true && node server.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.11",

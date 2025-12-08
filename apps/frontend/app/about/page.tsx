@@ -203,9 +203,10 @@ export default function AboutPage() {
                 <span className="text-white/60">oleh</span>
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Yohanes Octavian Rizky</h3>
+              <p className="text-white/60 text-sm italic mb-4">"Peningkatan kecil setiap hari pada akhirnya menghasilkan hasil yang besar."</p>
               <div className="flex items-center justify-center gap-4 mb-6">
                 <a 
-                  href="https://github.com/yoriz" 
+                  href="https://github.com/torpedoliar/" 
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
@@ -214,13 +215,16 @@ export default function AboutPage() {
                   <span className="text-sm">GitHub</span>
                 </a>
                 <a 
-                  href="mailto:contact@example.com"
+                  href="mailto:yohanesorizky@gmail.com"
                   className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
                 >
                   <Mail size={18} />
                   <span className="text-sm">Email</span>
                 </a>
               </div>
+              <p className="text-white/40 text-sm mb-2">
+                Version 1.3.0
+              </p>
               <p className="text-white/40 text-sm">
                 © {new Date().getFullYear()} Guest Registration & Check-in System. All rights reserved.
               </p>

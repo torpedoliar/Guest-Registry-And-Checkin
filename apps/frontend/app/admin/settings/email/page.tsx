@@ -152,37 +152,49 @@ export default function EmailSettingsPage() {
 
   const fetchSettings = async () => {
     try {
-      const data = await apiFetch("/email/settings");
-      if (data) {
+      const data = await apiFetch<EmailSettings>("/email/settings");
+      if (data && data.id) {
         setSettings(prev => ({
           ...prev,
           ...data,
-          smtpPass: "", // Don't show password
+          smtpPass: "", // Don't show password, user needs to re-enter if changing
         }));
       }
-    } catch (error) {
-      console.error("Failed to fetch settings:", error);
+    } catch (error: any) {
+      console.error("Failed to fetch settings:", error?.message || error);
+      // Don't show error for initial load - just use defaults
     } finally {
       setLoading(false);
     }
   };
 
   const handleSave = async () => {
+    // Validate required fields
+    if (!settings.smtpHost || !settings.smtpUser || !settings.senderEmail) {
+      alert("Mohon lengkapi semua field yang wajib diisi (SMTP Host, Username, Email Pengirim)");
+      return;
+    }
+    
     setSaving(true);
     try {
       await apiFetch("/email/settings", {
         method: "POST",
         body: JSON.stringify(settings),
       });
-      alert("Email settings saved successfully!");
+      alert("Pengaturan email berhasil disimpan!");
     } catch (error: any) {
-      alert("Failed to save: " + error.message);
+      alert(error.message || "Gagal menyimpan pengaturan");
     } finally {
       setSaving(false);
     }
   };
 
   const handleTestConnection = async () => {
+    if (!settings.smtpHost || !settings.smtpUser) {
+      setTestResult({ success: false, message: "Lengkapi SMTP Host dan Username terlebih dahulu" });
+      return;
+    }
+    
     setTesting(true);
     setTestResult(null);
     try {
@@ -194,10 +206,32 @@ export default function EmailSettingsPage() {
         });
       }
       
-      const result = await apiFetch("/email/test-connection", { method: "POST" }) as { success: boolean; message: string };
-      setTestResult(result);
+      const result = await apiFetch<{ success: boolean; message: string }>("/email/test-connection", { method: "POST" });
+      
+      // Translate common error messages
+      if (!result.success) {
+        const errorMap: Record<string, string> = {
+          'Authentication rejected': 'Autentikasi ditolak. Periksa username dan password.',
+          'Connection timeout': 'Koneksi timeout. Periksa host dan port SMTP.',
+          'Connection refused': 'Koneksi ditolak. Periksa host dan port SMTP.',
+          'Invalid login': 'Login tidak valid. Periksa username dan password.',
+          'ENOTFOUND': 'Server SMTP tidak ditemukan. Periksa hostname.',
+          'ECONNREFUSED': 'Koneksi ditolak. Periksa port SMTP.',
+        };
+        
+        let friendlyMessage = result.message;
+        for (const [key, msg] of Object.entries(errorMap)) {
+          if (result.message.includes(key)) {
+            friendlyMessage = msg;
+            break;
+          }
+        }
+        setTestResult({ success: false, message: friendlyMessage });
+      } else {
+        setTestResult({ success: true, message: "Koneksi berhasil! SMTP siap digunakan." });
+      }
     } catch (error: any) {
-      setTestResult({ success: false, message: error.message });
+      setTestResult({ success: false, message: error.message || "Gagal test koneksi" });
     } finally {
       setTesting(false);
     }

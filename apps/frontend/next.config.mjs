@@ -7,12 +7,14 @@ const nextConfig = {
       const fromPublic = process.env.NEXT_PUBLIC_API_BASE_URL;
       const isDocker = process.env.IS_DOCKER === 'true';
       const backendPort = process.env.BACKEND_PORT || '4000';
+      const useHttps = process.env.USE_HTTPS === 'true';
+      const protocol = useHttps ? 'https' : 'http';
 
       if (fromEnv) return fromEnv;
-      if (isDocker) return `http://backend:${backendPort}`;
+      if (isDocker) return `${protocol}://backend:${backendPort}`;
       if (fromPublic) return fromPublic.replace(/\/?api\/?$/, '');
 
-      return `http://localhost:${backendPort}`;
+      return `${protocol}://localhost:${backendPort}`;
     })();
 
     console.log('[Next.js] Rewriting API requests to:', backendOrigin);

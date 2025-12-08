@@ -1,19 +1,24 @@
 export function apiBase() {
   // Always use same-origin '/api' in the browser so that LAN devices work
   if (typeof window !== 'undefined') return '/api';
+  
+  // Determine protocol based on USE_HTTPS environment variable
+  const useHttps = process.env.USE_HTTPS === 'true';
+  const protocol = useHttps ? 'https' : 'http';
+  
   // On the server (SSR/build), fall back to env or local dev default
   if (process.env.BACKEND_ORIGIN) {
     return `${process.env.BACKEND_ORIGIN}/api`;
   }
   if (process.env.IS_DOCKER === 'true') {
     const backendPort = process.env.BACKEND_PORT || '4000';
-    return `http://backend:${backendPort}/api`;
+    return `${protocol}://backend:${backendPort}/api`;
   }
   const envBase = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (envBase) return envBase;
   // Fallback to localhost with configurable port
   const backendPort = process.env.BACKEND_PORT || '4000';
-  return `http://localhost:${backendPort}/api`;
+  return `${protocol}://localhost:${backendPort}/api`;
 }
 
 export function getToken(): string | null {
@@ -27,12 +32,35 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const token = getToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
-  const res = await fetch(`${apiBase()}${path}`, { ...options, headers });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Request failed: ${res.status}`);
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}${path}`, { ...options, headers });
+  } catch (networkError: any) {
+    throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
   }
-  return res.json();
+
+  // Get response text first
+  const text = await res.text();
+
+  if (!res.ok) {
+    // Parse error message for user-friendly display
+    const errorMessage = parseErrorMessage(text);
+    throw new Error(errorMessage);
+  }
+
+  // Handle empty response
+  if (!text || text.trim() === '') {
+    return {} as T;
+  }
+
+  // Try to parse as JSON
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // If response is not JSON, return as-is wrapped in object or throw error
+    console.warn('Response is not valid JSON:', text.substring(0, 100));
+    throw new Error('Server mengembalikan response yang tidak valid. Silakan coba lagi.');
+  }
 }
 
 export function toApiUrl(path?: string | null): string {
@@ -48,43 +76,104 @@ export function toApiUrl(path?: string | null): string {
 // Helper function to parse API error messages into user-friendly messages
 export function parseErrorMessage(errorText: string): string {
   const errorMap: Record<string, string> = {
-    'Event not found': 'Event tidak ditemukan. Silakan pilih event yang aktif terlebih dahulu.',
-    'No active event': 'Tidak ada event aktif. Silakan aktifkan event terlebih dahulu.',
+    // Authentication & Authorization
     'Invalid credentials': 'Login gagal. Username atau password salah.',
     'Unauthorized': 'Sesi telah berakhir. Silakan login kembali.',
-    'Invalid date format': 'Format tanggal tidak valid.',
+    'Wrong password': 'Password yang Anda masukkan salah.',
+    'User not found': 'User tidak ditemukan.',
+    'Token expired': 'Sesi telah berakhir. Silakan login kembali.',
+    'Invalid token': 'Sesi tidak valid. Silakan login kembali.',
+    
+    // Event errors
+    'Event not found': 'Event tidak ditemukan. Silakan pilih event yang aktif terlebih dahulu.',
+    'No active event': 'Tidak ada event aktif. Silakan aktifkan event terlebih dahulu.',
     'Cannot delete active event': 'Tidak dapat menghapus event yang sedang aktif.',
+    'Invalid date format': 'Format tanggal tidak valid.',
+    
+    // Guest errors
     'Guest not found': 'Data tamu tidak ditemukan.',
+    'Guest already checked in': 'Tamu sudah melakukan check-in sebelumnya.',
+    'Guest not checked in': 'Tamu belum melakukan check-in.',
+    'Duplicate guest ID': 'ID Tamu sudah digunakan.',
+    'Guest ID already exists': 'ID Tamu sudah ada dalam sistem.',
+    
+    // Email errors
     'Email settings not configured': 'Pengaturan email belum dikonfigurasi. Silakan atur SMTP terlebih dahulu.',
     'Guest does not have an email': 'Tamu ini tidak memiliki alamat email.',
     'Failed to send email': 'Gagal mengirim email. Periksa pengaturan SMTP.',
+    'Authentication rejected': 'Autentikasi SMTP ditolak. Periksa username dan password email.',
+    'SMTP connection failed': 'Gagal terhubung ke server email. Periksa host dan port SMTP.',
+    'SMTP password is required': 'Password SMTP wajib diisi untuk konfigurasi baru.',
+    
+    // File upload errors
     'No logo file provided': 'File logo tidak ditemukan.',
     'No background file provided': 'File background tidak ditemukan.',
-    'Password salah': 'Password yang Anda masukkan salah. Silakan coba lagi.',
-    'Password diperlukan': 'Password wajib diisi untuk melakukan aksi ini.',
+    'File too large': 'Ukuran file terlalu besar.',
+    'Invalid file type': 'Tipe file tidak didukung.',
+    
+    // Validation errors
+    'Password salah': 'Password yang Anda masukkan salah.',
+    'Password diperlukan': 'Password wajib diisi.',
     'Alasan pembatalan harus diisi': 'Alasan pembatalan wajib diisi (minimal 5 karakter).',
+    'Required field missing': 'Data wajib belum diisi lengkap.',
+    'Invalid input': 'Data yang dimasukkan tidak valid.',
+    
+    // Souvenir & Prize errors
+    'Souvenir not found': 'Souvenir tidak ditemukan.',
+    'Prize not found': 'Hadiah tidak ditemukan.',
+    'Already taken': 'Souvenir sudah diambil sebelumnya.',
+    'Not eligible': 'Tamu tidak memenuhi syarat.',
+    'Must check in first': 'Tamu harus check-in terlebih dahulu.',
+    
+    // Server errors
+    'Internal Server Error': 'Terjadi kesalahan pada server. Silakan coba lagi nanti.',
+    'Internal server error': 'Terjadi kesalahan pada server. Silakan coba lagi nanti.',
+    'Service unavailable': 'Layanan sedang tidak tersedia. Silakan coba lagi nanti.',
+    'Database error': 'Terjadi kesalahan database. Silakan hubungi administrator.',
+    'Connection refused': 'Tidak dapat terhubung ke server.',
+    
+    // Network errors
+    'Failed to fetch': 'Gagal terhubung ke server. Periksa koneksi internet.',
+    'Network error': 'Terjadi kesalahan jaringan. Periksa koneksi internet.',
+    'Timeout': 'Koneksi timeout. Silakan coba lagi.',
   };
+
+  // Handle empty or undefined input
+  if (!errorText || errorText.trim() === '') {
+    return 'Terjadi kesalahan. Silakan coba lagi.';
+  }
 
   try {
     const parsed = JSON.parse(errorText);
-    const message = parsed.message || parsed.error || '';
+    const message = parsed.message || parsed.error || parsed.statusMessage || '';
     
     // Check if we have a friendly message for this error
     for (const [key, friendlyMessage] of Object.entries(errorMap)) {
-      if (message.includes(key)) {
+      if (message.toLowerCase().includes(key.toLowerCase())) {
         return friendlyMessage;
       }
     }
     
-    return message || 'Terjadi kesalahan. Silakan coba lagi.';
+    // If message exists and is reasonably formatted, return it
+    if (message && message.length < 200 && !message.includes('<')) {
+      return message;
+    }
+    
+    return 'Terjadi kesalahan. Silakan coba lagi.';
   } catch {
-    // Not JSON, check raw text
+    // Not JSON, check raw text against error map
     for (const [key, friendlyMessage] of Object.entries(errorMap)) {
-      if (errorText.includes(key)) {
+      if (errorText.toLowerCase().includes(key.toLowerCase())) {
         return friendlyMessage;
       }
     }
-    return errorText || 'Terjadi kesalahan. Silakan coba lagi.';
+    
+    // If it's a short, readable message without HTML, return it
+    if (errorText.length < 200 && !errorText.includes('<') && !errorText.includes('{')) {
+      return errorText;
+    }
+    
+    return 'Terjadi kesalahan. Silakan coba lagi.';
   }
 }
 

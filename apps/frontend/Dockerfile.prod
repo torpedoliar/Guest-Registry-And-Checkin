@@ -1,0 +1,22 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production=false
+
+COPY . .
+
+ARG NEXT_PUBLIC_API_BASE_URL=/api
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
+# Set backend origin for rewrites during build
+ENV BACKEND_ORIGIN=http://backend:4000
+ENV IS_DOCKER=true
+ENV BACKEND_PORT=4000
+
+RUN npm run build
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]

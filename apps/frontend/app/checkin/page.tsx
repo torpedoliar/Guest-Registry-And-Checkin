@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { apiBase, toApiUrl, parseErrorMessage } from "../../lib/api";
 import { Html5Qrcode } from "html5-qrcode";
-import { Search, QrCode, Loader2, CheckCircle, Clock, Users, X, XCircle, UserPlus, Settings, Camera } from 'lucide-react';
+import { Search, QrCode, Loader2, CheckCircle, Clock, Users, X, XCircle, UserPlus, Settings, Camera, UserCheck } from 'lucide-react';
 
 type EventConfig = {
   id: string;
@@ -17,6 +17,7 @@ type EventConfig = {
   checkinPopupTimeoutMs?: number;
   autoCreateGuestOnCheckin?: boolean;
   enablePhotoCapture?: boolean;
+  allowMultipleCheckinPerCounter?: boolean;
 };
 
 type GuestCheckin = {
@@ -91,6 +92,7 @@ export default function CheckinPage() {
   const [autoCreateGuest, setAutoCreateGuest] = useState(false);
   const [enablePhotoCapture, setEnablePhotoCapture] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [savingEventSetting, setSavingEventSetting] = useState(false);
   const [creatingGuest, setCreatingGuest] = useState(false);
   const [showPhotoCapture, setShowPhotoCapture] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
@@ -148,6 +150,31 @@ export default function CheckinPage() {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
+    }
+  };
+
+  const toggleMultipleCheckinPerCounter = async (enabled: boolean) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) {
+      setError('Login diperlukan untuk mengubah pengaturan event');
+      return;
+    }
+    setSavingEventSetting(true);
+    try {
+      const res = await fetch(`${apiBase()}/events/active`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ allowMultipleCheckinPerCounter: enabled }),
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(parseErrorMessage(errorText));
+      }
+      setCfg(prev => prev ? { ...prev, allowMultipleCheckinPerCounter: enabled } : prev);
+    } catch (e: any) {
+      setError(e.message || 'Gagal menyimpan pengaturan');
+    } finally {
+      setSavingEventSetting(false);
     }
   };
 
@@ -361,6 +388,11 @@ export default function CheckinPage() {
   // Photo capture functions
   const startCamera = async () => {
     try {
+      // Check if we're in a secure context (required for camera access)
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        throw new Error('Kamera membutuhkan koneksi aman (HTTPS atau localhost). Akses via https:// atau localhost.');
+      }
+      
       // Check if camera API is available
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Browser tidak mendukung akses kamera. Gunakan HTTPS atau localhost.');
@@ -477,6 +509,12 @@ export default function CheckinPage() {
   // Auto capture photo function - automatically captures and uploads photo
   const autoCapturephoto = async (guest: Guest) => {
     if (!guest || autoCapturing) return;
+    
+    // Check if we're in a secure context (required for camera access)
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      console.warn('Camera requires secure context (HTTPS or localhost)');
+      return;
+    }
     
     // Check if camera API is available
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -881,6 +919,32 @@ export default function CheckinPage() {
                   />
                 </div>
               </label>
+
+              {/* Event-level setting - only for authenticated admins */}
+              {isAuth && (
+                <div className="pt-4 border-t border-white/10">
+                  <div className="text-xs text-white/40 uppercase tracking-wider mb-3">Pengaturan Event</div>
+                  <label className={`flex items-center justify-between p-4 rounded-lg border border-white/20 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors ${savingEventSetting ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <div className="flex items-center gap-3">
+                      <UserCheck size={20} className="text-purple-400" />
+                      <div>
+                        <div className="font-medium text-white">Multiple Check-in Per Counter</div>
+                        <div className="text-sm text-white/60">Tamu dapat check-in di berbagai admin/counter (maks 1x per counter)</div>
+                      </div>
+                    </div>
+                    <div className={`w-12 h-7 rounded-full transition-colors relative ${cfg?.allowMultipleCheckinPerCounter ? 'bg-purple-500' : 'bg-white/20'}`}>
+                      <div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${cfg?.allowMultipleCheckinPerCounter ? 'translate-x-5' : 'translate-x-0'}`} />
+                      <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={cfg?.allowMultipleCheckinPerCounter ?? false}
+                        disabled={savingEventSetting}
+                        onChange={(e) => toggleMultipleCheckinPerCounter(e.target.checked)}
+                      />
+                    </div>
+                  </label>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex gap-3">

@@ -296,6 +296,7 @@ export class GuestsController {
     // Get event info
     let eventName = '';
     let eventDate = '';
+    let eventTime = '';
     let eventLocation = '';
     let activeEventId = eventId;
     if (!activeEventId) {
@@ -304,12 +305,14 @@ export class GuestsController {
         activeEventId = activeEvent.id;
         eventName = activeEvent.name;
         eventDate = activeEvent.date ? new Date(activeEvent.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '';
+        eventTime = activeEvent.time || '';
         eventLocation = activeEvent.location || '';
       }
     } else {
       const event = await this.guests.getEventById(eventId!);
       eventName = event?.name || '';
       eventDate = event?.date ? new Date(event.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '';
+      eventTime = event?.time || '';
       eventLocation = event?.location || '';
     }
 
@@ -357,9 +360,10 @@ export class GuestsController {
       doc.fontSize(12).font('Helvetica').fillColor('#94a3b8')
          .text(eventName || 'Event', marginLeft, 45);
       
-      if (eventDate || eventLocation) {
+      const eventInfoParts = [eventDate, eventTime ? `${eventTime} WIB` : '', eventLocation].filter(Boolean);
+      if (eventInfoParts.length > 0) {
         doc.fontSize(9).fillColor('#64748b')
-           .text(`${eventDate}${eventDate && eventLocation ? ' • ' : ''}${eventLocation}`, marginLeft, 60);
+           .text(eventInfoParts.join(' • '), marginLeft, 60);
       }
 
       // Export timestamp (right side)

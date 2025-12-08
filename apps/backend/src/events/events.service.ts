@@ -57,6 +57,7 @@ export class EventsService {
       const d = new Date(dto.date);
       if (!isNaN(d.getTime())) data.date = d;
     }
+    if (dto.time) data.time = dto.time;
     if (dto.location) data.location = dto.location;
     return this.prisma.event.create({ data });
   }
@@ -130,6 +131,7 @@ export class EventsService {
       data: {
         name: newName || `${source.name} (Copy)`,
         date: source.date,
+        time: source.time,
         location: source.location,
         logoUrl: source.logoUrl,
         backgroundType: source.backgroundType,
@@ -141,6 +143,8 @@ export class EventsService {
         enableLuckyDraw: source.enableLuckyDraw,
         enableSouvenir: source.enableSouvenir,
         allowDuplicateGuestId: source.allowDuplicateGuestId,
+        allowMultipleCheckinPerCounter: source.allowMultipleCheckinPerCounter,
+        requireCheckinForSouvenir: source.requireCheckinForSouvenir,
         customCategories: source.customCategories as any,
         isActive: false,
       },
@@ -195,6 +199,7 @@ export class EventsService {
   async setActiveConfig(input: {
     name?: string;
     date?: Date | string | null;
+    time?: string | null;
     location?: string | null;
     logoUrl?: string | null;
     backgroundType?: 'NONE' | 'IMAGE' | 'VIDEO';
@@ -206,6 +211,8 @@ export class EventsService {
     enableLuckyDraw?: boolean;
     enableSouvenir?: boolean;
     allowDuplicateGuestId?: boolean;
+    allowMultipleCheckinPerCounter?: boolean;
+    requireCheckinForSouvenir?: boolean;
     customCategories?: Array<{ value: string; label: string; color: string }> | null;
   }) {
     const active = await this.getActive();

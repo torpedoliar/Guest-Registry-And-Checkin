@@ -29,6 +29,11 @@ export default function WebcamCapture({ open, onClose, onCapture, aspect = "squa
       setIsLoading(true);
       setError(null);
       try {
+        // Check if we're in a secure context (required for camera access)
+        if (typeof window !== 'undefined' && !window.isSecureContext) {
+          throw new Error("Kamera membutuhkan koneksi aman (HTTPS atau localhost). Akses via https:// atau localhost.");
+        }
+        
         // Check if getUserMedia is available
         if (!navigator.mediaDevices?.getUserMedia) {
           throw new Error("Browser tidak mendukung akses kamera. Gunakan HTTPS atau localhost.");

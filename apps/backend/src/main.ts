@@ -3,14 +3,42 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
+import * as fs from 'fs';
 import { join } from 'path';
 // Use require to avoid ESM interop issues
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const compression = require('compression');
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
   const port = process.env.PORT ? Number(process.env.PORT) : 4000;
+  const useHttps = process.env.USE_HTTPS === 'true';
+
+  let app;
+
+  if (useHttps) {
+    // HTTPS mode - load SSL certificates
+    const sslKeyPath = process.env.SSL_KEY_PATH || './certs/server.key';
+    const sslCertPath = process.env.SSL_CERT_PATH || './certs/server.crt';
+
+    if (!fs.existsSync(sslKeyPath) || !fs.existsSync(sslCertPath)) {
+      console.error('❌ SSL certificates not found!');
+      console.error(`   Key: ${sslKeyPath}`);
+      console.error(`   Cert: ${sslCertPath}`);
+      console.error('   Run generate-ssl.bat to create self-signed certificates.');
+      process.exit(1);
+    }
+
+    const httpsOptions = {
+      key: fs.readFileSync(sslKeyPath),
+      cert: fs.readFileSync(sslCertPath),
+    };
+    app = await NestFactory.create(AppModule, { httpsOptions });
+    console.log('🔒 Running in HTTPS mode');
+  } else {
+    // HTTP mode (default)
+    app = await NestFactory.create(AppModule);
+    console.log('🔓 Running in HTTP mode');
+  }
 
   app.setGlobalPrefix('api');
   app.enableCors({ origin: process.env.CORS_ORIGIN || '*' });
@@ -40,6 +68,9 @@ async function bootstrap() {
 
   const host = process.env.HOST || '0.0.0.0';
   await app.listen(port, host);
+  
+  const protocol = useHttps ? 'https' : 'http';
+  console.log(`🚀 Server running on ${protocol}://${host}:${port}`);
 }
 
 bootstrap();

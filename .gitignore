@@ -52,3 +52,15 @@ word/
 # Docker volumes data
 data/
 postgres-data/
+
+# SSL Certificates
+certs/
+apps/backend/certs/
+apps/frontend/certs/
+*.pem
+*.key
+*.crt
+
+# Database backups
+*.sql
+backup_*.sql

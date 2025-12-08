@@ -220,6 +220,8 @@ export class GuestsService {
         queueNumber,
         guestId: input.guestId,
         name: input.name,
+        email: input.email,
+        phone: input.phone,
         photoUrl: photoUrl ?? input.photoUrl ?? undefined,
         tableLocation: input.tableLocation || '-',
         company: input.company,
@@ -274,44 +276,61 @@ export class GuestsService {
     const event = guest.event;
     const allowMultiple = event?.allowMultipleCheckin ?? false;
     const maxCheckins = event?.maxCheckinCount ?? 1;
+    const allowMultiplePerCounter = event?.allowMultipleCheckinPerCounter ?? false;
 
     // Check if this admin already checked in this guest
     const existingCheckinByAdmin = guest.checkins.find(c => c.checkinById === adminId);
     
     if (guest.checkedIn) {
-      if (!allowMultiple) {
-        // Multiple check-in not allowed, throw conflict with check-in history
+      // Check mode: allowMultipleCheckinPerCounter takes priority
+      if (allowMultiplePerCounter) {
+        // Per-counter mode: allow 1 check-in per admin/counter (no maxCheckinCount limit)
+        if (existingCheckinByAdmin) {
+          const guestWithHistory = await this.prisma.guest.findUnique({ 
+            where: { id },
+            include: { checkins: { orderBy: { checkinAt: 'asc' } } }
+          });
+          throw new ConflictException({ 
+            ...guestWithHistory, 
+            alreadyCheckedByThisAdmin: true,
+            message: `Sudah check-in oleh ${adminName || 'Admin ini'}`
+          });
+        }
+        // Allow check-in by different admin
+      } else if (!allowMultiple) {
+        // Multiple check-in not allowed at all, throw conflict with check-in history
         const guestWithHistory = await this.prisma.guest.findUnique({ 
           where: { id },
           include: { checkins: { orderBy: { checkinAt: 'asc' } } }
         });
         throw new ConflictException(guestWithHistory);
-      }
-      
-      // Check if already checked in by this admin
-      if (existingCheckinByAdmin) {
-        const guestWithHistory = await this.prisma.guest.findUnique({ 
-          where: { id },
-          include: { checkins: { orderBy: { checkinAt: 'asc' } } }
-        });
-        throw new ConflictException({ 
-          ...guestWithHistory, 
-          alreadyCheckedByThisAdmin: true,
-          message: `Sudah check-in oleh ${adminName || 'Admin ini'}`
-        });
-      }
-      
-      // Check if max check-ins reached
-      if (guest.checkinCount >= maxCheckins) {
-        const guestWithHistory = await this.prisma.guest.findUnique({ 
-          where: { id },
-          include: { checkins: { orderBy: { checkinAt: 'asc' } } }
-        });
-        throw new ConflictException({ 
-          ...guestWithHistory, 
-          maxReached: true,
-          message: `Sudah mencapai maksimum ${maxCheckins}x check-in`
-        });
+      } else {
+        // Regular multiple check-in mode with maxCheckinCount limit
+        // Check if already checked in by this admin
+        if (existingCheckinByAdmin) {
+          const guestWithHistory = await this.prisma.guest.findUnique({ 
+            where: { id },
+            include: { checkins: { orderBy: { checkinAt: 'asc' } } }
+          });
+          throw new ConflictException({ 
+            ...guestWithHistory, 
+            alreadyCheckedByThisAdmin: true,
+            message: `Sudah check-in oleh ${adminName || 'Admin ini'}`
+          });
+        }
+        
+        // Check if max check-ins reached
+        if (guest.checkinCount >= maxCheckins) {
+          const guestWithHistory = await this.prisma.guest.findUnique({ 
+            where: { id },
+            include: { checkins: { orderBy: { checkinAt: 'asc' } } }
+          });
+          throw new ConflictException({ 
+            ...guestWithHistory, 
+            maxReached: true,
+            message: `Sudah mencapai maksimum ${maxCheckins}x check-in`
+          });
+        }
       }
     }
 
