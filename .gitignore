@@ -64,3 +64,11 @@ apps/frontend/certs/
 # Database backups
 *.sql
 backup_*.sql
+
+# Archive files
+*.7z
+*.zip
+*.rar
+
+# Backup folders
+backup_*/

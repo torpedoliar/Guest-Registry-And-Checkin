@@ -74,7 +74,12 @@ if %errorlevel% neq 0 (
 echo.
 echo [5/6] Backup konfigurasi...
 copy ".env.production" "%BACKUP_DIR%\.env.production" >nul 2>&1
-copy "docker-compose.prod.yml" "%BACKUP_DIR%\docker-compose.prod.yml" >nul 2>&1
+:: Use docker-compose.restore.yml for backup (uses pre-built images instead of build context)
+if exist "docker-compose.restore.yml" (
+    copy "docker-compose.restore.yml" "%BACKUP_DIR%\docker-compose.prod.yml" >nul 2>&1
+) else (
+    copy "docker-compose.prod.yml" "%BACKUP_DIR%\docker-compose.prod.yml" >nul 2>&1
+)
 copy "generate-ssl.bat" "%BACKUP_DIR%\generate-ssl.bat" >nul 2>&1
 xcopy "certs" "%BACKUP_DIR%\certs\" /E /I /Q >nul 2>&1
 echo       [OK] Configuration files saved
@@ -82,57 +87,71 @@ echo       [OK] Configuration files saved
 :: Create restore script in backup folder
 echo.
 echo [6/6] Membuat script restore...
-echo @echo off > "%BACKUP_DIR%\restore.bat"
-echo setlocal enabledelayedexpansion >> "%BACKUP_DIR%\restore.bat"
-echo title Docker Restore - Guest Registry >> "%BACKUP_DIR%\restore.bat"
-echo echo. >> "%BACKUP_DIR%\restore.bat"
-echo echo ================================================================ >> "%BACKUP_DIR%\restore.bat"
-echo echo           DOCKER RESTORE - GUEST REGISTRY >> "%BACKUP_DIR%\restore.bat"
-echo echo ================================================================ >> "%BACKUP_DIR%\restore.bat"
-echo echo. >> "%BACKUP_DIR%\restore.bat"
-echo. >> "%BACKUP_DIR%\restore.bat"
-echo echo [1/7] Loading Docker images... >> "%BACKUP_DIR%\restore.bat"
-echo docker load -i backend-image.tar >> "%BACKUP_DIR%\restore.bat"
-echo docker load -i frontend-image.tar >> "%BACKUP_DIR%\restore.bat"
-echo docker load -i postgres-image.tar >> "%BACKUP_DIR%\restore.bat"
-echo echo       [OK] Images loaded >> "%BACKUP_DIR%\restore.bat"
-echo. >> "%BACKUP_DIR%\restore.bat"
-echo echo [2/7] Menyalin konfigurasi... >> "%BACKUP_DIR%\restore.bat"
-echo copy ".env.production" "..\" ^>nul 2^>^&1 >> "%BACKUP_DIR%\restore.bat"
-echo copy "docker-compose.prod.yml" "..\" ^>nul 2^>^&1 >> "%BACKUP_DIR%\restore.bat"
-echo xcopy "certs" "..\certs\" /E /I /Q /Y ^>nul 2^>^&1 >> "%BACKUP_DIR%\restore.bat"
-echo echo       [OK] Configuration copied >> "%BACKUP_DIR%\restore.bat"
-echo. >> "%BACKUP_DIR%\restore.bat"
-echo echo [3/7] Starting database... >> "%BACKUP_DIR%\restore.bat"
-echo cd .. >> "%BACKUP_DIR%\restore.bat"
-echo docker-compose -f docker-compose.prod.yml --env-file .env.production up -d postgres >> "%BACKUP_DIR%\restore.bat"
-echo echo       Waiting 15 seconds... >> "%BACKUP_DIR%\restore.bat"
-echo timeout /t 15 /nobreak ^>nul >> "%BACKUP_DIR%\restore.bat"
-echo. >> "%BACKUP_DIR%\restore.bat"
-echo echo [4/7] Restore database... >> "%BACKUP_DIR%\restore.bat"
-echo cd "%%~dp0" >> "%BACKUP_DIR%\restore.bat"
-echo docker exec -i guest-db-prod psql -U postgres -d guest_registry ^< database.sql >> "%BACKUP_DIR%\restore.bat"
-echo cd .. >> "%BACKUP_DIR%\restore.bat"
-echo echo       [OK] Database restored >> "%BACKUP_DIR%\restore.bat"
-echo. >> "%BACKUP_DIR%\restore.bat"
-echo echo [5/7] Starting backend... >> "%BACKUP_DIR%\restore.bat"
-echo docker-compose -f docker-compose.prod.yml --env-file .env.production up -d backend >> "%BACKUP_DIR%\restore.bat"
-echo timeout /t 20 /nobreak ^>nul >> "%BACKUP_DIR%\restore.bat"
-echo. >> "%BACKUP_DIR%\restore.bat"
-echo echo [6/7] Restore uploads... >> "%BACKUP_DIR%\restore.bat"
-echo cd "%%~dp0" >> "%BACKUP_DIR%\restore.bat"
-echo docker cp uploads guest-backend-prod:/app/ 2^>nul >> "%BACKUP_DIR%\restore.bat"
-echo cd .. >> "%BACKUP_DIR%\restore.bat"
-echo. >> "%BACKUP_DIR%\restore.bat"
-echo echo [7/7] Starting frontend... >> "%BACKUP_DIR%\restore.bat"
-echo docker-compose -f docker-compose.prod.yml --env-file .env.production up -d frontend >> "%BACKUP_DIR%\restore.bat"
-echo timeout /t 5 /nobreak ^>nul >> "%BACKUP_DIR%\restore.bat"
-echo. >> "%BACKUP_DIR%\restore.bat"
-echo echo ================================================================ >> "%BACKUP_DIR%\restore.bat"
-echo echo                    RESTORE COMPLETE! >> "%BACKUP_DIR%\restore.bat"
-echo echo ================================================================ >> "%BACKUP_DIR%\restore.bat"
-echo docker ps --filter "name=guest" >> "%BACKUP_DIR%\restore.bat"
-echo pause >> "%BACKUP_DIR%\restore.bat"
+
+:: Copy the main restore-docker.bat to backup folder
+copy "restore-docker.bat" "%BACKUP_DIR%\restore.bat" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo       [WARN] Gagal copy restore-docker.bat, membuat restore.bat manual...
+    :: Fallback: create a basic restore script
+    (
+        echo @echo off
+        echo setlocal enabledelayedexpansion
+        echo chcp 65001 ^>nul
+        echo title Docker Restore - Guest Registry
+        echo.
+        echo echo ================================================================
+        echo echo           DOCKER RESTORE - GUEST REGISTRY
+        echo echo ================================================================
+        echo echo.
+        echo.
+        echo echo [1/7] Loading Docker images...
+        echo docker load -i backend-image.tar
+        echo if %%errorlevel%% neq 0 echo [ERROR] Gagal load backend image
+        echo docker load -i frontend-image.tar
+        echo if %%errorlevel%% neq 0 echo [ERROR] Gagal load frontend image
+        echo docker load -i postgres-image.tar
+        echo if %%errorlevel%% neq 0 echo [ERROR] Gagal load postgres image
+        echo echo       [OK] Images loaded
+        echo.
+        echo echo [2/7] Menyalin konfigurasi...
+        echo copy ".env.production" "..\" ^>nul 2^>^&1
+        echo copy "docker-compose.prod.yml" "..\" ^>nul 2^>^&1
+        echo xcopy "certs" "..\certs\" /E /I /Q /Y ^>nul 2^>^&1
+        echo echo       [OK] Configuration copied
+        echo.
+        echo echo [3/7] Menghentikan container lama...
+        echo cd ..
+        echo docker-compose -f docker-compose.prod.yml --env-file .env.production down 2^>nul
+        echo.
+        echo echo [4/7] Starting database...
+        echo docker-compose -f docker-compose.prod.yml --env-file .env.production up -d postgres
+        echo echo       Waiting 15 seconds...
+        echo timeout /t 15 /nobreak ^>nul
+        echo.
+        echo echo [5/7] Restore database...
+        echo cd "%%%%~dp0"
+        echo docker exec -i guest-db-prod psql -U postgres -d guest_registry ^< database.sql
+        echo cd ..
+        echo echo       [OK] Database restored
+        echo.
+        echo echo [6/7] Starting backend...
+        echo docker-compose -f docker-compose.prod.yml --env-file .env.production up -d backend
+        echo timeout /t 20 /nobreak ^>nul
+        echo cd "%%%%~dp0"
+        echo if exist "uploads" docker cp uploads guest-backend-prod:/app/
+        echo cd ..
+        echo.
+        echo echo [7/7] Starting frontend...
+        echo docker-compose -f docker-compose.prod.yml --env-file .env.production up -d frontend
+        echo timeout /t 5 /nobreak ^>nul
+        echo.
+        echo echo ================================================================
+        echo echo                    RESTORE COMPLETE!
+        echo echo ================================================================
+        echo docker ps --filter "name=guest" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        echo pause
+    ) > "%BACKUP_DIR%\restore.bat"
+)
 
 echo       [OK] restore.bat created
 

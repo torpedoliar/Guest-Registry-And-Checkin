@@ -85,6 +85,7 @@ export default function CheckinPage() {
   const [unchecking, setUnchecking] = useState(false);
   const [isDuplicateCheckIn, setIsDuplicateCheckIn] = useState(false);
   const [isAuth, setIsAuth] = useState(false);
+  const [currentAdmin, setCurrentAdmin] = useState<{ id: string; name: string } | null>(null);
   const [showUncheckModal, setShowUncheckModal] = useState(false);
   const [uncheckPassword, setUncheckPassword] = useState('');
   const [uncheckReason, setUncheckReason] = useState('');
@@ -683,9 +684,30 @@ export default function CheckinPage() {
 
   // Detect auth (admin logged in) to conditionally show admin-only actions
   useEffect(() => {
-    const check = () => {
+    const check = async () => {
       if (typeof window === 'undefined') return;
-      setIsAuth(!!localStorage.getItem('token'));
+      const token = localStorage.getItem('token');
+      setIsAuth(!!token);
+      
+      // Fetch current admin info
+      if (token) {
+        try {
+          const res = await fetch(`${apiBase()}/users/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const user = await res.json();
+            setCurrentAdmin({ id: user.id, name: user.displayName || user.username });
+            console.log('[CheckinPage] Current admin:', user.displayName || user.username, 'ID:', user.id);
+          } else {
+            setCurrentAdmin(null);
+          }
+        } catch {
+          setCurrentAdmin(null);
+        }
+      } else {
+        setCurrentAdmin(null);
+      }
     };
     check();
     const onStorage = (e: StorageEvent) => { if (e.key === 'token') check(); };
@@ -783,6 +805,21 @@ export default function CheckinPage() {
               )}
             </div>
           </div>
+          {/* Admin indicator */}
+          {currentAdmin ? (
+            <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/30 rounded-lg px-3 py-2">
+              <UserCheck size={18} className="text-emerald-400" />
+              <div className="text-sm">
+                <div className="text-emerald-300 font-medium">{currentAdmin.name}</div>
+                <div className="text-emerald-400/60 text-xs font-mono">{currentAdmin.id.substring(0, 8)}...</div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-amber-500/20 border border-amber-500/30 rounded-lg px-3 py-2">
+              <XCircle size={18} className="text-amber-400" />
+              <span className="text-amber-300 text-sm">Tidak Login</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1119,53 +1156,64 @@ export default function CheckinPage() {
                 <div className="text-emerald-400 text-xl font-bold flex items-center gap-2">
                   <CheckCircle size={24} />
                   CHECK-IN BERHASIL
+                  {(checkedGuest.checkinCount ?? 0) > 1 && (
+                    <span className="text-sm bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full ml-2">
+                      Check-in ke-{checkedGuest.checkinCount}
+                    </span>
+                  )}
                 </div>
               )}
 
-              {isDuplicateCheckIn && (
+              {/* Show check-in history for both success and duplicate */}
+              {checkedGuest.checkins && checkedGuest.checkins.length > 0 && (
+                <div className={`mb-4 rounded-lg p-3 ${isDuplicateCheckIn ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-emerald-500/10 border border-emerald-500/20'}`}>
+                  {isDuplicateCheckIn && checkedGuest.message && (
+                    <div className="text-base text-amber-300 font-medium mb-2">{checkedGuest.message}</div>
+                  )}
+                  <div className={`text-sm uppercase tracking-wider font-medium mb-2 ${isDuplicateCheckIn ? 'text-amber-200/80' : 'text-emerald-200/80'}`}>
+                    Riwayat Check-in ({checkedGuest.checkinCount || checkedGuest.checkins.length}x)
+                  </div>
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {checkedGuest.checkins.map((c, idx) => (
+                      <div key={c.id || idx} className={`flex items-center justify-between text-sm rounded px-2 py-1 ${isDuplicateCheckIn ? 'bg-amber-500/10' : 'bg-emerald-500/10'}`}>
+                        <span className={`font-medium ${isDuplicateCheckIn ? 'text-amber-100' : 'text-emerald-100'}`}>
+                          {c.checkinByName || 'Admin'}
+                          {c.counterName && <span className="text-white/50 ml-1">({c.counterName})</span>}
+                        </span>
+                        <span className={`font-mono text-xs ${isDuplicateCheckIn ? 'text-amber-200/70' : 'text-emerald-200/70'}`}>
+                          {new Date(c.checkinAt).toLocaleString('id-ID', {
+                            day: '2-digit',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Fallback for old data without checkins array */}
+              {isDuplicateCheckIn && (!checkedGuest.checkins || checkedGuest.checkins.length === 0) && checkedGuest.checkedInAt && (
                 <div className="mb-4 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
                   {checkedGuest.message && (
                     <div className="text-base text-amber-300 font-medium mb-2">{checkedGuest.message}</div>
                   )}
-                  {checkedGuest.checkins && checkedGuest.checkins.length > 0 ? (
-                    <>
-                      <div className="text-sm text-amber-200/80 uppercase tracking-wider font-medium mb-2">
-                        Riwayat Check-in ({checkedGuest.checkinCount || checkedGuest.checkins.length}x)
-                      </div>
-                      <div className="space-y-2 max-h-32 overflow-y-auto">
-                        {checkedGuest.checkins.map((c, idx) => (
-                          <div key={c.id || idx} className="flex items-center justify-between text-sm bg-amber-500/10 rounded px-2 py-1">
-                            <span className="text-amber-100 font-medium">{c.checkinByName || 'Admin'}</span>
-                            <span className="text-amber-200/70 font-mono text-xs">
-                              {new Date(c.checkinAt).toLocaleString('id-ID', {
-                                day: '2-digit',
-                                month: 'short',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : checkedGuest.checkedInAt && (
-                    <>
-                      <div className="text-sm text-amber-200/80 uppercase tracking-wider font-medium">Waktu Check-in Sebelumnya</div>
-                      <div className="text-xl font-mono font-bold text-amber-100">
-                        {new Date(checkedGuest.checkedInAt).toLocaleString('id-ID', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit'
-                        })}
-                      </div>
-                      {checkedGuest.checkedInByName && (
-                        <div className="text-sm text-amber-200/70 mt-1">Oleh: {checkedGuest.checkedInByName}</div>
-                      )}
-                    </>
+                  <div className="text-sm text-amber-200/80 uppercase tracking-wider font-medium">Waktu Check-in Sebelumnya</div>
+                  <div className="text-xl font-mono font-bold text-amber-100">
+                    {new Date(checkedGuest.checkedInAt).toLocaleString('id-ID', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
+                  </div>
+                  {checkedGuest.checkedInByName && (
+                    <div className="text-sm text-amber-200/70 mt-1">Oleh: {checkedGuest.checkedInByName}</div>
                   )}
                 </div>
               )}

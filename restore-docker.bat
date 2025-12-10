@@ -22,16 +22,16 @@ if %errorlevel% neq 0 (
 echo [0/7] Memeriksa file backup...
 set MISSING=0
 
-if not exist "backend-image.tar.gz" (
-    echo       [MISSING] backend-image.tar.gz
+if not exist "backend-image.tar" (
+    echo       [MISSING] backend-image.tar
     set MISSING=1
 )
-if not exist "frontend-image.tar.gz" (
-    echo       [MISSING] frontend-image.tar.gz
+if not exist "frontend-image.tar" (
+    echo       [MISSING] frontend-image.tar
     set MISSING=1
 )
-if not exist "postgres-image.tar.gz" (
-    echo       [MISSING] postgres-image.tar.gz
+if not exist "postgres-image.tar" (
+    echo       [MISSING] postgres-image.tar
     set MISSING=1
 )
 if not exist "database.sql" (
@@ -72,22 +72,21 @@ echo.
 :: Load Docker Images
 echo [1/7] Loading Docker images...
 echo       - Backend image...
-docker load -i backend-image.tar.gz
+docker load -i backend-image.tar
 if %errorlevel% neq 0 (
-    :: Try with gunzip if available
-    gunzip -c backend-image.tar.gz | docker load 2>nul
+    echo       [ERROR] Gagal load backend image
 )
 
 echo       - Frontend image...
-docker load -i frontend-image.tar.gz
+docker load -i frontend-image.tar
 if %errorlevel% neq 0 (
-    gunzip -c frontend-image.tar.gz | docker load 2>nul
+    echo       [ERROR] Gagal load frontend image
 )
 
 echo       - PostgreSQL image...
-docker load -i postgres-image.tar.gz
+docker load -i postgres-image.tar
 if %errorlevel% neq 0 (
-    gunzip -c postgres-image.tar.gz | docker load 2>nul
+    echo       [ERROR] Gagal load postgres image
 )
 echo       [OK] Images loaded
 echo.
